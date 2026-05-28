@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, GitMerge, Users, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useServerFn } from "@tanstack/react-start";
+import { useServerFn } from "@/shims/tanstack-react-start";
 import { mergeCandidates } from "@/lib/peserta-no-test/merge.functions";
 
 type CandRow = {

@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/use-auth";
 import { logAudit } from "@/lib/audit";
 import { toast } from "sonner";
-import { useServerFn } from "@tanstack/react-start";
+import { useServerFn } from "@/shims/tanstack-react-start";
 import {
   patientSaveDraft as patientSaveDraftFn,
   patientSubmitAnamnesis as patientSubmitAnamnesisFn,
