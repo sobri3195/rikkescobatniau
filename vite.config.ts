@@ -9,8 +9,6 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), tsconfigPaths()],
   resolve: {
     alias: {
-      "@tanstack/react-start/server": path.resolve(__dirname, "./src/shims/tanstack-react-start-server.ts"),
-      "@tanstack/react-start": path.resolve(__dirname, "./src/shims/tanstack-react-start.ts"),
       "@": path.resolve(__dirname, "./src"),
     },
   },

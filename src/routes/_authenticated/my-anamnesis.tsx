@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
+import { useServerFn } from "@/shims/tanstack-react-start";
 import { useQuery } from "@tanstack/react-query";
 import { getMyExamForAnamnesis } from "@/lib/peserta-self.functions";
 import { IdentitasAnamnesisForm } from "@/components/rikkes/IdentitasAnamnesisForm";
