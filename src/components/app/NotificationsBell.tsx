@@ -7,7 +7,7 @@ import { listNotifications } from "@/lib/services/notificationService";
 import { isLocalMode } from "@/lib/storage-mode";
 import { useAuth } from "@/lib/use-auth";
 import { toast } from "sonner";
-import { supabase } from "@/lib/local-supabase-shim";
+import { markAllNotificationsAsRead, markNotificationAsRead } from "@/lib/services/notificationService";
 
 type Notif = {
   id: string;
@@ -39,19 +39,8 @@ export function NotificationsBell() {
     if (!user) return;
     load();
     if (isLocalMode) return;
-    const channel = supabase
-      .channel(`notif-${user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
-        (payload) => {
-          const n = payload.new as Notif;
-          setItems((prev) => [n, ...prev].slice(0, 20));
-          toast.info(n.title, { description: n.body ?? undefined });
-        },
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    const timer = window.setInterval(() => { void load(); }, 4000);
+    return () => { window.clearInterval(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
@@ -59,14 +48,14 @@ export function NotificationsBell() {
 
   async function markRead(id: string) {
     const now = new Date().toISOString();
-    if (!isLocalMode) await supabase.from("notifications").update({ read_at: now } as never).eq("id", id);
+    await markNotificationAsRead(id, now);
     setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read_at: now } : n)));
   }
 
   async function markAllRead() {
     if (!user) return;
     const now = new Date().toISOString();
-    if (!isLocalMode) await supabase.from("notifications").update({ read_at: now } as never).eq("user_id", user.id).is("read_at", null);
+    await markAllNotificationsAsRead(user.id, now);
     setItems((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: now })));
   }
 
