@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 import { logAudit } from "@/lib/audit";
 import type { PreviewRow } from "./rikkes-xlsx-import";
 

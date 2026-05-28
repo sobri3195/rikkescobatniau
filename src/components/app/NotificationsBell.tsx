@@ -7,7 +7,7 @@ import { listNotifications } from "@/lib/services/notificationService";
 import { isLocalMode } from "@/lib/storage-mode";
 import { useAuth } from "@/lib/use-auth";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 
 type Notif = {
   id: string;

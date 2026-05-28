@@ -6,7 +6,7 @@
 // Rekap / Laporan / Export — without waiting for the participant to be
 // finalized, and without requiring every section to be complete.
 
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 import { recalculateExamSummary } from "@/lib/rikkes-calculations";
 
 /** Map a rikkes group_key to the legacy exam_sections.section_key list it represents. */

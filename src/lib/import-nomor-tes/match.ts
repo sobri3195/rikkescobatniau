@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 import { normalizeCandidateName, type ParsedNomorTesRow } from "./parse";
 
 export type MatchConfidence = "high" | "medium" | "low" | "ambiguous" | "not_found";

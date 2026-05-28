@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 import { Badge } from "@/components/ui/badge";
 import { ShieldAlert, CheckCircle2, XCircle, Clock } from "lucide-react";
 

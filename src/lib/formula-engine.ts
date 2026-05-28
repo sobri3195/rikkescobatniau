@@ -4,7 +4,7 @@
 // defaults from rikkes-calculations.ts when no active rule set exists,
 // so the rest of the app keeps working during transition.
 
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 import type { Classification, KesumValue, KeswaValue, FinalValue, SectionLite } from "@/lib/rikkes-calculations";
 
 export interface BmiRule {

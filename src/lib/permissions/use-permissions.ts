@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 import { isLocalMode } from "@/lib/storage-mode";
 import { listSectionAssignments } from "@/lib/services/permissionService";
 import { useAuth } from "@/lib/use-auth";

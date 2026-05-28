@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, GitMerge, Users, AlertTriangle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 import { toast } from "sonner";
 import { useServerFn } from "@/shims/tanstack-react-start";
 import { mergeCandidates } from "@/lib/peserta-no-test/merge.functions";

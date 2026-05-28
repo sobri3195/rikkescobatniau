@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 
 const CLEARED = new Set(["Submitted", "Approved", "Locked", "Cleared"]);
 

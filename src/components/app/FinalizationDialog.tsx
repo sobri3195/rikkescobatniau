@@ -13,7 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { SECTIONS } from "@/lib/sections";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 import { isAnamnesisReadyForFinalization, getAnamnesisStage } from "@/lib/permissions/anamnesis-workflow";
 import { logAudit } from "@/lib/audit";
 import { toast } from "sonner";
