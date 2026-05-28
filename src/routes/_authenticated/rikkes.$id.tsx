@@ -22,6 +22,7 @@ import { evaluateGate, loadHariHSettings, type HariHSettings } from "@/lib/hari-
 import { syncGroupToRekap } from "@/lib/rekap-sync";
 import { getDisplayStatusLocal, normalizeSectionStatus, isSectionCompleted, syncNeurologiLabKeswaStatusLocal, resolveRikkesDetailLocal, logAuditLocal } from "@/lib/localDb";
 import { ensureExamForCandidateLocal } from "@/lib/services/examService";
+import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
 
 // Lazy-load heavy form components so initial detail render only ships the active section.
 const IdentitasAnamnesisForm = lazy(() => import("@/components/rikkes/IdentitasAnamnesisForm").then(m => ({ default: m.IdentitasAnamnesisForm })));
@@ -36,8 +37,12 @@ const LabSubteamForm = lazy(() => import("@/components/subteam/LabForm").then(m 
 const PsychologyForm = lazy(() => import("@/components/subteam/PsychologyForm").then(m => ({ default: m.PsychologyForm })));
 
 export const Route = createFileRoute("/_authenticated/rikkes/$id")({
-  component: RikkesDetail,
+  component: RikkesDetailRoute,
 });
+
+function RikkesDetailRoute() {
+  return <AppErrorBoundary scope="Detail RIKKES"><RikkesDetail /></AppErrorBoundary>;
+}
 
 type Group = {
   id: string;

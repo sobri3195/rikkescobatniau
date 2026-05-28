@@ -13,10 +13,15 @@ import { exportLocalDbJson, loadDashboardLocalDb, runDashboardMigrationAndRepair
 import { SelectionCard, type SelectionCardData } from "@/components/selection/SelectionCard";
 import { toast } from "sonner";
 import { logAudit } from "@/lib/audit";
+import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
-  component: Dashboard,
+  component: DashboardPage,
 });
+
+function DashboardPage() {
+  return <AppErrorBoundary scope="Dashboard"><Dashboard /></AppErrorBoundary>;
+}
 
 function SummaryCard({ icon: Icon, label, value, tone }: { icon: any; label: string; value: number; tone: string }) {
   return (

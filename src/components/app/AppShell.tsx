@@ -9,6 +9,7 @@ import { NotificationsBell } from "@/components/app/NotificationsBell";
 import { usePermissions } from "@/lib/permissions/use-permissions";
 import { getDb } from "@/lib/localDb";
 import { PERMISSIONS } from "@/lib/permissions/keys";
+import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
 
 const NAV: { to: string; label: string; icon: any; perm?: string; perms?: string[] }[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, perm: PERMISSIONS.DASHBOARD_VIEW },
@@ -43,6 +44,10 @@ const NAV: { to: string; label: string; icon: any; perm?: string; perms?: string
 ];
 
 export function AppShell() {
+  return <AppErrorBoundary scope="AppShell"><AppShellInner /></AppErrorBoundary>;
+}
+
+function AppShellInner() {
   const { user, roles, signOut } = useAuth();
   const { loading: permLoading, has, hasAny, hasWildcard } = usePermissions();
   const state = useRouterState();

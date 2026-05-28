@@ -12,10 +12,15 @@ import { QuickSupportingModal } from "@/components/hari-h/QuickSupportingModal";
 import { NoTestBadge } from "@/components/app/NoTestBadge";
 import { CandidateProgressPopover } from "@/components/candidate/CandidateProgressPopover";
 import { buildHariHQueueRowsLocal } from "@/lib/services/hariHService";
+import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
 
 export const Route = createFileRoute("/_authenticated/hari-h")({
-  component: HariHQueuePage,
+  component: HariHQueuePageRoute,
 });
+
+function HariHQueuePageRoute() {
+  return <AppErrorBoundary scope="Hari-H"><HariHQueuePage /></AppErrorBoundary>;
+}
 
 type Row = {
   exam_id: string | null;
