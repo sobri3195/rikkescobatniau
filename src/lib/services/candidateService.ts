@@ -1,6 +1,6 @@
 import { generateId, getDb, getLocalSession, nowIso, saveDb } from "@/lib/localDb";
 import { addAuditLogLocal } from "@/lib/services/auditService";
-import { createExamForCandidateLocal } from "@/lib/services/examService";
+import { createExamForCandidateLocal, ensureExamForCandidateLocal } from "@/lib/services/examService";
 
 function generateTemporaryId(db: any) {
   const d = new Date();
@@ -17,9 +17,10 @@ export function listCandidatesWithoutTestNumberLocal(filters: any = {}) {
     const noTestEmpty = !c.test_number || String(c.test_number).trim() === "" || c.test_number === "-";
     return noTestEmpty || c.test_number_status === "pending" || c.no_test_missing === true;
   }).map((candidate: any) => {
-    const exam = (db.exams ?? []).find((e: any) => e.candidate_id === candidate.id && !e.is_deleted);
+    const exam = filters?.ensureExam ? ensureExamForCandidateLocal(candidate.id) : (db.exams ?? []).find((e: any) => e.candidate_id === candidate.id && !e.is_deleted);
     const selection = (db.selections ?? []).find((s: any) => s.id === candidate.selection_id);
-    return { ...candidate, candidate_id: candidate.id, exam_id: exam?.id ?? null, selection_name: selection?.selection_name ?? selection?.name ?? "-", exam_status: exam?.exam_status ?? "Belum Ada Exam", hari_h_stage: exam?.hari_h_stage ?? "-", ekg_initial_status: exam?.ekg_initial_status ?? "Belum", radiology_initial_status: exam?.radiology_initial_status ?? "Belum", progress_percentage: exam?.progress_percentage ?? 0 };
+    const sections = (db.exam_sections ?? []).filter((section: any) => section.exam_id === exam?.id);
+    return { ...candidate, candidate_id: candidate.id, exam_id: exam?.id ?? null, selection_id: candidate.selection_id, selection_name: selection?.selection_name ?? selection?.name ?? "-", exam_status: exam?.exam_status ?? "Belum Ada Exam", hari_h_stage: exam?.hari_h_stage ?? "Menunggu Rontgen & EKG", ekg_initial_status: exam?.ekg_initial_status ?? "Belum", radiology_initial_status: exam?.radiology_initial_status ?? "Belum", progress_percentage: exam?.progress_percentage ?? 0, progress_completed_count: exam?.progress_completed_count ?? 0, progress_total_count: exam?.progress_total_count ?? sections.length, sections };
   });
   if (filters.selection_id) rows = rows.filter((r: any) => r.selection_id === filters.selection_id);
   if (filters.search) { const q = String(filters.search).toLowerCase(); rows = rows.filter((r: any) => [r.full_name, r.temporary_id, r.nrp_nip, r.unit_position, r.rank, r.panda, r.pok_korp, r.test_number].some((v: any) => String(v ?? "").toLowerCase().includes(q))); }
