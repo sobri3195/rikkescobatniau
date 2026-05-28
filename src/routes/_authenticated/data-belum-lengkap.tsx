@@ -1,6 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, useMemo } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -78,16 +77,12 @@ function IncompletePage() {
   const [modal, setModal] = useState<{ mode: "ekg" | "radiology"; examId: string; candidateId: string } | null>(null);
 
   async function load() {
-    const { data } = await supabase
-      .from("exams")
-      .select(`
-        id, candidate_id, hari_h_stage, ekg_initial_status, radiology_initial_status,
-        bypass_initial_at, bypass_initial_reviewed_at,
-        candidates!inner(full_name, test_number, temporary_id, nrp_nip, rank, unit_position),
-        medical_history_forms(anamnesis_workflow_status, patient_signature_url, candidate_signature_url, doctor_signature_url, doctor_signed_at, doctor_review_status)
-      `)
-      .neq("exam_status", "Finalized")
-      .limit(1000);
+    const db = getDb() as any;
+    const data = (db.exams ?? []).filter((e: any) => e.exam_status !== "Finalized").slice(0,1000).map((e: any) => ({
+      ...e,
+      candidates: (db.candidates ?? []).find((c: any) => c.id === e.candidate_id),
+      medical_history_forms: (db.medical_history_forms ?? []).filter((m: any) => m.exam_id === e.id),
+    }));
     const mapped: Row[] = (data ?? []).map((r: any) => {
       const cand = r.candidates;
       const issues: IssueKey[] = [];

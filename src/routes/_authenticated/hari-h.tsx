@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { getDb } from "@/lib/localDb";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,16 +39,9 @@ function HariHQueuePage() {
 
   async function load() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("exams")
-      .select(`
-        id, candidate_id, hari_h_stage, ekg_initial_status, radiology_initial_status,
-        candidates!inner(full_name, rank, nrp_nip, unit_position, test_number, temporary_id)
-      `)
-      .neq("exam_status", "Finalized")
-      .limit(500);
+    const db = getDb() as any;
+    const data = (db.exams ?? []).filter((e: any) => e.exam_status !== "Finalized").slice(0,500).map((e: any) => ({ ...e, candidates: (db.candidates ?? []).find((c: any) => c.id === e.candidate_id) }));
     setLoading(false);
-    if (error) return;
     const mapped: Row[] = (data ?? []).map((r: any) => ({
       exam_id: r.id,
       candidate_id: r.candidate_id,
