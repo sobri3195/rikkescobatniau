@@ -7,11 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Activity, Radio, FileWarning, ExternalLink, RefreshCw } from "lucide-react";
-import { HARI_H_STAGES, STAGE_BADGE, INIT_STATUS_BADGE, type HariHStage, recomputeHariHStage } from "@/lib/hari-h-stage";
+import { HARI_H_STAGES, STAGE_BADGE, INIT_STATUS_BADGE, type HariHStage } from "@/lib/hari-h-stage";
 import { QuickSupportingModal } from "@/components/hari-h/QuickSupportingModal";
 import { NoTestBadge } from "@/components/app/NoTestBadge";
 import { CandidateProgressPopover } from "@/components/candidate/CandidateProgressPopover";
-import { buildHariHQueueRowsLocal } from "@/lib/services/hariHService";
+import { buildHariHQueueRowsLocal, getHariHColumnLocal, refreshHariHStagesLocal } from "@/lib/services/hariHService";
 
 export const Route = createFileRoute("/_authenticated/hari-h")({
   component: HariHQueuePage,
@@ -68,15 +68,17 @@ function HariHQueuePage() {
     const map: Record<string, Row[]> = {};
     HARI_H_STAGES.forEach((s) => (map[s] = []));
     filtered.forEach((r) => {
-      (map[r.hari_h_stage] ?? map["Registrasi Awal"]).push(r);
+      (map[getHariHColumnLocal(r)] ?? map["Registrasi Awal"]).push(r);
     });
     return map;
   }, [filtered]);
 
   async function recomputeAll() {
     setLoading(true);
-    await Promise.all(filtered.slice(0, 50).map((r) => recomputeHariHStage(r.exam_id)));
-    await load();
+    const refreshed = await refreshHariHStagesLocal(filtered);
+    setRows(refreshed.slice(0, 500));
+    setLoading(false);
+    return;
   }
 
   return (
@@ -119,9 +121,10 @@ function HariHQueuePage() {
             <Card key={r.exam_id} className="shadow-sm">
               <CardContent className="p-3 space-y-2 text-xs">
                 <div className="font-semibold text-sm text-slate-900 break-words whitespace-normal leading-tight" title={r.full_name}>{r.display_name || r.full_name || "-"}</div>
-                <div className="text-xs text-slate-500">{r.test_number ? `No Test: ${r.test_number}` : `TMP: ${r.temporary_id || "-"}`}</div>
+                <div className="text-xs text-slate-500">{r.display_identifier}</div>
                 <div className="text-xs text-slate-500">{r.rank || "-"} / {r.nrp_nip || "-"}</div>
                 <div className="text-xs text-slate-500">{r.unit_position || "-"}</div>
+                <div className="text-xs text-slate-500">{(r as any).selection_name || "-"}</div>
                 <div><NoTestBadge testNumber={r.test_number} temporaryId={r.temporary_id} showLabel={false} /></div>
                                 <div className="flex flex-wrap gap-1">
                   <Badge variant="outline" className={INIT_STATUS_BADGE[r.ekg_initial_status as never] ?? ""}>EKG: {r.ekg_initial_status}</Badge>
@@ -163,9 +166,10 @@ function HariHQueuePage() {
                 <Card key={r.exam_id} className="shadow-sm">
                   <CardContent className="p-3 space-y-2 text-xs">
                     <div className="font-semibold text-sm text-slate-900 break-words whitespace-normal leading-tight" title={r.full_name}>{r.display_name || r.full_name || "-"}</div>
-                <div className="text-xs text-slate-500">{r.test_number ? `No Test: ${r.test_number}` : `TMP: ${r.temporary_id || "-"}`}</div>
+                <div className="text-xs text-slate-500">{r.display_identifier}</div>
                 <div className="text-xs text-slate-500">{r.rank || "-"} / {r.nrp_nip || "-"}</div>
                 <div className="text-xs text-slate-500">{r.unit_position || "-"}</div>
+                <div className="text-xs text-slate-500">{(r as any).selection_name || "-"}</div>
                     <div>
                       <NoTestBadge testNumber={r.test_number} temporaryId={r.temporary_id} showLabel={false} />
                     </div>

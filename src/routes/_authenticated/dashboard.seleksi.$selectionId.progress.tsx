@@ -9,7 +9,7 @@ import { ArrowLeft, RefreshCw, AlertCircle, Search, RotateCcw } from "lucide-rea
 import { NoTestBadge } from "@/components/app/NoTestBadge";
 import { getDb, LOCAL_SESSION_KEY, nowIso } from "@/lib/localDb";
 import { toast } from "sonner";
-import { buildParticipantRowLocal } from "@/lib/services/candidateService";
+import { buildParticipantRowLocal } from "@/lib/services/participantRowService";
 
 export const Route = createFileRoute("/_authenticated/dashboard/seleksi/$selectionId/progress")({ component: SelectionParticipantsProgress });
 
