@@ -946,31 +946,6 @@ export function IdentitasAnamnesisForm({
           <Button size="sm" variant="ghost" type="button" onClick={() => setOpenSections(["sec1","sec2","sec3","sec4","sec5","sec6","sec7","sec8"])}>Expand</Button>
           <Button size="sm" variant="ghost" type="button" onClick={() => setOpenSections([])}>Collapse</Button>
           <Button size="sm" variant="outline" type="button" onClick={exportPDF}><FileDown className="h-4 w-4 mr-1" /> PDF</Button>
-          {submitted && isAdmin && (
-            <Button size="sm" variant="destructive" type="button" onClick={() => setReturnOpen(true)}>
-              <Undo2 className="h-4 w-4 mr-1" /> Kembalikan ke Draft
-            </Button>
-          )}
-          {isPatient && patientCanEdit && (
-            <>
-              <Button size="sm" variant="outline" type="button" onClick={saveDraft} disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />} Simpan Draft
-              </Button>
-              <Button size="sm" type="button" onClick={patientSubmit} disabled={saving || validationErrors.length > 0}>
-                <Send className="h-4 w-4 mr-1" /> Submit (Peserta)
-              </Button>
-            </>
-          )}
-          {!isPatient && !readOnlyFor(status, isAdmin) && (
-            <>
-              <Button size="sm" variant="outline" type="button" onClick={saveDraft} disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />} Simpan Draft
-              </Button>
-              <Button size="sm" type="button" onClick={submitForm} disabled={saving || !canSubmit}>
-                <Send className="h-4 w-4 mr-1" /> Submit
-              </Button>
-            </>
-          )}
           {canDoctorReview && (
             <>
               <Button size="sm" variant="outline" type="button" onClick={() => setClarOpen(true)} disabled={saving}>
