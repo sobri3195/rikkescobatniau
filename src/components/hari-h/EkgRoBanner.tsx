@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { getExamDetailLocal } from "@/lib/services/examService";
+import { getCardiologyByExamIdLocal } from "@/lib/services/cardiologyService";
+import { getRadiologyByExamIdLocal } from "@/lib/services/radiologyService";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Activity, ScanLine, CheckCircle2, AlertCircle, ShieldAlert, Upload } from "lucide-react";
@@ -19,15 +21,12 @@ export function EkgRoBanner({ examId, candidateId }: { examId?: string; candidat
   useEffect(() => {
     if (!examId) return;
     (async () => {
-      const [e, r, x] = await Promise.all([
-        supabase.from("exam_cardiology").select("status").eq("exam_id", examId).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
-        supabase.from("exam_radiology").select("status").eq("exam_id", examId).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
-        supabase.from("exams").select("hari_h_stage, bypass_initial_at, bypass_initial_reason, bypass_initial_reviewed_at").eq("id", examId).maybeSingle(),
-      ]);
-      setEkg(e.data?.status ?? "Belum Diisi");
-      setRo(r.data?.status ?? "Belum Diisi");
-      setStage((x.data as any)?.hari_h_stage ?? null);
-      const xd = x.data as any;
+      const e = getCardiologyByExamIdLocal(examId);
+      const r = getRadiologyByExamIdLocal(examId);
+      const xd = getExamDetailLocal(examId) as any;
+      setEkg(e?.status ?? "Belum Diisi");
+      setRo(r?.status ?? "Belum Diisi");
+      setStage(xd?.hari_h_stage ?? null);
       if (xd?.bypass_initial_at) setBypass({ at: xd.bypass_initial_at, reason: xd.bypass_initial_reason, reviewed: xd.bypass_initial_reviewed_at });
       else setBypass(null);
     })();

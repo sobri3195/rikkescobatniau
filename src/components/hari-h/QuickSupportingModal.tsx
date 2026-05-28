@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { nowIso } from "@/lib/localDb";
+import { upsertCardiologyLocal, getCardiologyByExamIdLocal } from "@/lib/services/cardiologyService";
+import { upsertRadiologyLocal, getRadiologyByExamIdLocal } from "@/lib/services/radiologyService";
+import { createDefaultExamSectionsLocal, updateSectionLocal } from "@/lib/services/examSectionService";
+import { getExamDetailLocal, recalcExamProgressLocal, updateExamLocal } from "@/lib/services/examService";
+import { addAuditLogLocal } from "@/lib/services/auditService";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -9,8 +14,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Upload, Trash2, FileText, Image as ImageIcon, Loader2, Camera } from "lucide-react";
-import { logAudit } from "@/lib/audit";
-import { recomputeHariHStage } from "@/lib/hari-h-stage";
 
 type Mode = "ekg" | "radiology";
 type Attachment = { name: string; path: string; size: number; type: string; uploaded_at: string };
@@ -18,7 +21,6 @@ type Attachment = { name: string; path: string; size: number; type: string; uplo
 const CONFIG = {
   ekg: {
     title: "Input Cepat EKG",
-    table: "exam_cardiology",
     sectionKey: "ekg",
     types: ["EKG", "Ergometri", "Lainnya"],
     clearNote: "EKG sudah diperiksa dan dinyatakan clear.",
@@ -26,7 +28,6 @@ const CONFIG = {
   },
   radiology: {
     title: "Input Cepat Rontgen / Radiologi",
-    table: "exam_radiology",
     sectionKey: "radiology",
     types: ["Thorax", "Lainnya"],
     clearNote: "Rontgen sudah diperiksa dan dinyatakan clear.",
@@ -80,10 +81,6 @@ export function QuickSupportingModal({
         "Kualifikasi bukan K2. Lampiran yang sudah dipilih akan dihapus. Lanjutkan?",
       );
       if (!ok) return;
-      // remove uploaded files from storage best-effort
-      void supabase.storage
-        .from("hari-h-attachments")
-        .remove(attachments.map((a) => a.path));
       setAttachments([]);
     }
     setQualification(next);
@@ -92,15 +89,8 @@ export function QuickSupportingModal({
   useEffect(() => {
     if (!open || !examId) return;
     (async () => {
-      const { data } = await supabase
-        .from(cfg.table as any)
-        .select("*")
-        .eq("exam_id", examId)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (data) {
-        const d: any = data;
+      const d: any = mode === "radiology" ? getRadiologyByExamIdLocal(examId) : getCardiologyByExamIdLocal(examId);
+      if (d) {
         setRowId(d.id);
         setExamType(d.examination_type ?? cfg.types[0]);
         setExaminedOn(d.examined_on ?? new Date().toISOString().slice(0, 10));
@@ -124,103 +114,54 @@ export function QuickSupportingModal({
 
   async function handleUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
-    const MAX_SIZE = 5 * 1024 * 1024;
-    const allowed = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
-    setUploading(true);
-    const added: Attachment[] = [];
-    try {
-      for (const file of Array.from(files)) {
-        if (allowed.length && file.type && !allowed.includes(file.type)) {
-          toast.error(`Format tidak didukung: ${file.name}`);
-          continue;
-        }
-        if (file.size > MAX_SIZE) {
-          toast.error(`${file.name} melebihi 5 MB`);
-          continue;
-        }
-        const ext = file.name.split(".").pop() || "bin";
-        const path = `${examId}/${mode}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
-        const { error } = await supabase.storage.from("hari-h-attachments").upload(path, file, {
-          contentType: file.type || "application/octet-stream",
-          upsert: false,
-        });
-        if (error) {
-          toast.error(`Gagal upload ${file.name}: ${error.message}`);
-          continue;
-        }
-        added.push({
-          name: file.name,
-          path,
-          size: file.size,
-          type: file.type,
-          uploaded_at: new Date().toISOString(),
-        });
-      }
-      setAttachments((prev) => [...prev, ...added]);
-      if (added.length > 0) toast.success(`${added.length} file diunggah`);
-    } finally {
-      setUploading(false);
-    }
+    const added: Attachment[] = Array.from(files).map((file) => ({
+      name: file.name,
+      path: `${examId}/${mode}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${file.name}`,
+      size: file.size,
+      type: file.type,
+      uploaded_at: nowIso(),
+    }));
+    setAttachments((prev) => [...prev, ...added]);
+    toast.success(`${added.length} file ditambahkan ke localDb`);
   }
 
   async function removeAttachment(idx: number) {
     const att = attachments[idx];
     if (!att) return;
-    await supabase.storage.from("hari-h-attachments").remove([att.path]);
     setAttachments((prev) => prev.filter((_, i) => i !== idx));
   }
 
   async function persist(nextStatus: string) {
     setLoading(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
+      const exam = getExamDetailLocal(examId) as any;
       const payload: any = {
         exam_id: examId,
         candidate_id: candidateId,
+        selection_id: exam?.selection_id ?? null,
         examination_type: examType,
         examined_on: examinedOn,
         examination,
         conclusion,
         qualification_u: qualification || null,
+        qualification: qualification || "",
         status: nextStatus,
         attachments_json: attachments,
-        examiner_id: u.user?.id ?? null,
-        examined_at: nextStatus !== "Draft" ? new Date().toISOString() : null,
+        examined_at: nextStatus !== "Draft" ? nowIso() : null,
       };
-      let saved: any;
-      if (rowId) {
-        const { data, error } = await supabase
-          .from(cfg.table as any)
-          .update(payload)
-          .eq("id", rowId)
-          .select()
-          .single();
-        if (error) throw error;
-        saved = data;
-      } else {
-        const { data, error } = await supabase
-          .from(cfg.table as any)
-          .insert(payload)
-          .select()
-          .single();
-        if (error) throw error;
-        saved = data;
-        setRowId(saved.id);
-      }
-      await recomputeHariHStage(examId);
-      await logAudit({
-        action:
-          nextStatus === "Cleared"
-            ? `clear_${mode}`
-            : nextStatus === "Submitted"
-            ? `submit_${mode}`
-            : `save_${mode}_draft`,
-        module: cfg.moduleName,
-        record_id: saved.id,
-        candidate_id: candidateId,
-        exam_id: examId,
-        after: { status: nextStatus, attachment_count: attachments.length },
+      const saved: any = mode === "radiology" ? upsertRadiologyLocal(payload) : upsertCardiologyLocal(payload);
+      setRowId(saved.id);
+      createDefaultExamSectionsLocal(examId, candidateId, exam?.selection_id ?? "");
+      updateSectionLocal(examId, mode === "radiology" ? "rontgen" : "ekg", {
+        section_status: nextStatus === "Draft" ? "Draft" : "Submitted",
+        submitted_at: nextStatus === "Draft" ? null : nowIso(),
+        form_data_json: payload,
+        findings: conclusion || null,
+        classification: qualification || null,
       });
+      updateExamLocal(examId, mode === "radiology" ? { radiology_initial_status: nextStatus } : { ekg_initial_status: nextStatus });
+      recalcExamProgressLocal(examId);
+      addAuditLogLocal(`save_${mode}_local`, { exam_id: examId, candidate_id: candidateId, after_data_json: { status: nextStatus } });
       toast.success(
         nextStatus === "Cleared"
           ? "Ditandai Cleared"
@@ -256,11 +197,8 @@ export function QuickSupportingModal({
       toast.error("Kesimpulan wajib diisi");
       return;
     }
-    // For non-K2 radiology, strip attachments from submission payload
+    // For non-K2 radiology, strip attachment metadata from payload
     if (isRadiology && qualification !== "K2" && attachments.length > 0) {
-      void supabase.storage
-        .from("hari-h-attachments")
-        .remove(attachments.map((a) => a.path));
       setAttachments([]);
     }
     await persist("Submitted");

@@ -1,4 +1,6 @@
-import { supabase } from "@/integrations/supabase/client";
+import { getDb } from "@/lib/localDb";
+import { getCardiologyByExamIdLocal } from "@/lib/services/cardiologyService";
+import { getRadiologyByExamIdLocal } from "@/lib/services/radiologyService";
 
 const SCREENING_KEYS = new Set(["screening_hari_h"]);
 const NON_SUBTIM_KEYS = new Set([
@@ -27,13 +29,9 @@ const CLEARED = new Set(["Submitted", "Approved", "Locked", "Cleared"]);
 
 export async function loadHariHSettings(selectionId: string | null): Promise<HariHSettings> {
   // Try per-selection first, then global (selection_id is null)
-  const { data } = await supabase
-    .from("hari_h_settings")
-    .select("*")
-    .or(selectionId ? `selection_id.eq.${selectionId},selection_id.is.null` : "selection_id.is.null")
-    .order("selection_id", { ascending: false, nullsFirst: false })
-    .limit(1)
-    .maybeSingle();
+  const db = getDb() as any;
+  const rows = (db.hari_h_settings ?? []).filter((r: any) => selectionId ? (r.selection_id === selectionId || r.selection_id == null) : r.selection_id == null);
+  const data = rows.length ? rows[0] : null;
   return {
     require_ekg_before_screening: data?.require_ekg_before_screening ?? true,
     require_radiology_before_screening: data?.require_radiology_before_screening ?? true,
@@ -65,23 +63,11 @@ export async function evaluateGate(params: {
   let roStatus = "Belum Diisi";
 
   if (needEkg) {
-    const { data } = await supabase
-      .from("exam_cardiology")
-      .select("status")
-      .eq("exam_id", examId)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const data = getCardiologyByExamIdLocal(examId);
     ekgStatus = data?.status ?? "Belum Diisi";
   }
   if (needRo) {
-    const { data } = await supabase
-      .from("exam_radiology")
-      .select("status")
-      .eq("exam_id", examId)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const data = getRadiologyByExamIdLocal(examId);
     roStatus = data?.status ?? "Belum Diisi";
   }
 
