@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { listActiveExamsLocal } from "@/lib/services/examService";
+import { ensureExamForCandidateLocal, listActiveExamsLocal } from "@/lib/services/examService";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,24 +11,65 @@ import { HARI_H_STAGES, STAGE_BADGE, INIT_STATUS_BADGE, type HariHStage, recompu
 import { QuickSupportingModal } from "@/components/hari-h/QuickSupportingModal";
 import { NoTestBadge } from "@/components/app/NoTestBadge";
 import { CandidateProgressPopover } from "@/components/candidate/CandidateProgressPopover";
+import { getDb } from "@/lib/localDb";
 
 export const Route = createFileRoute("/_authenticated/hari-h")({
   component: HariHQueuePage,
 });
 
 type Row = {
-  exam_id: string;
+  exam_id: string | null;
   candidate_id: string;
   full_name: string;
+  display_name: string;
   rank: string | null;
   nrp_nip: string | null;
   unit_position: string | null;
   test_number: string | null;
   temporary_id: string | null;
+  display_identifier: string;
+  selection_id: string | null;
   hari_h_stage: HariHStage;
   ekg_initial_status: string;
   radiology_initial_status: string;
 };
+
+
+
+function buildHariHQueueRowsLocal(): Row[] {
+  const db = getDb() as any;
+  const candidates = (db.candidates ?? []).filter((candidate: any) => !candidate.is_deleted && !candidate.deleted_at);
+
+  return candidates.map((candidate: any) => {
+    const exam = (db.exams ?? []).find((item: any) => item.candidate_id === candidate.id && !item.is_deleted);
+    const fullName =
+      candidate.full_name ??
+      candidate.name ??
+      candidate.nama ??
+      candidate.candidate?.full_name ??
+      candidate.candidates?.full_name ??
+      "-";
+    const testNumber = String(candidate.test_number ?? "").trim();
+    const temporaryId = String(candidate.temporary_id ?? "").trim();
+
+    return {
+      candidate_id: candidate.id,
+      exam_id: exam?.id ?? null,
+      selection_id: candidate.selection_id ?? exam?.selection_id ?? null,
+      hari_h_stage: (exam?.hari_h_stage ?? "Registrasi Awal") as HariHStage,
+      ekg_initial_status: exam?.ekg_initial_status ?? "Belum Diisi",
+      radiology_initial_status: exam?.radiology_initial_status ?? "Belum Diisi",
+      full_name: fullName,
+      display_name: fullName,
+      rank: candidate.rank ?? candidate.pangkat ?? null,
+      nrp_nip: candidate.nrp_nip ?? candidate.nrp ?? candidate.nip ?? null,
+      unit_position: candidate.unit_position ?? candidate.unit ?? candidate.satuan ?? null,
+      test_number: testNumber || null,
+      temporary_id: temporaryId || null,
+      display_identifier: testNumber || temporaryId || "-",
+    };
+  });
+}
 
 function HariHQueuePage() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -39,21 +80,10 @@ function HariHQueuePage() {
 
   async function load() {
     setLoading(true);
-    const data = listActiveExamsLocal().slice(0, 500) as any[];
+    listActiveExamsLocal();
     setLoading(false);
-    const mapped: Row[] = (data ?? []).map((r: any) => ({
-      exam_id: r.id,
-      candidate_id: r.candidate_id,
-      hari_h_stage: (r.hari_h_stage ?? "Registrasi Awal") as HariHStage,
-      ekg_initial_status: r.ekg_initial_status ?? "Belum Diisi",
-      radiology_initial_status: r.radiology_initial_status ?? "Belum Diisi",
-      full_name: r.candidates?.full_name ?? "-",
-      rank: r.candidates?.rank ?? null,
-      nrp_nip: r.candidates?.nrp_nip ?? null,
-      unit_position: r.candidates?.unit_position ?? null,
-      test_number: r.candidates?.test_number ?? null,
-      temporary_id: r.candidates?.temporary_id ?? null,
-    }));
+    const mapped = buildHariHQueueRowsLocal().slice(0, 500);
+    mapped.forEach((participant) => console.log("Hari-H participant row:", participant));
     setRows(mapped);
   }
 
@@ -122,28 +152,29 @@ function HariHQueuePage() {
           {(byStage[mobileStage] ?? []).map((r) => (
             <Card key={r.exam_id} className="shadow-sm">
               <CardContent className="p-3 space-y-2 text-xs">
-                <div className="font-semibold text-sm leading-tight">{r.full_name}</div>
+                <div className="font-semibold text-sm text-slate-900 break-words whitespace-normal leading-tight" title={r.full_name}>{r.display_name || r.full_name || "-"}</div>
+                <div className="text-xs text-slate-500">{r.test_number ? `No Test: ${r.test_number}` : `TMP: ${r.temporary_id || "-"}`}</div>
+                <div className="text-xs text-slate-500">{r.rank || "-"} / {r.nrp_nip || "-"}</div>
+                <div className="text-xs text-slate-500">{r.unit_position || "-"}</div>
                 <div><NoTestBadge testNumber={r.test_number} temporaryId={r.temporary_id} showLabel={false} /></div>
-                {r.rank && <div className="text-muted-foreground">{r.rank}</div>}
-                {r.unit_position && <div className="text-muted-foreground">{r.unit_position}</div>}
-                <div className="flex flex-wrap gap-1">
+                                <div className="flex flex-wrap gap-1">
                   <Badge variant="outline" className={INIT_STATUS_BADGE[r.ekg_initial_status as never] ?? ""}>EKG: {r.ekg_initial_status}</Badge>
                   <Badge variant="outline" className={INIT_STATUS_BADGE[r.radiology_initial_status as never] ?? ""}>RO: {r.radiology_initial_status}</Badge>
                 </div>
                 <div className="flex flex-wrap gap-1 pt-1">
-                  <Button size="sm" variant="outline" className="h-8 text-xs flex-1" onClick={() => setModal({ mode: "ekg", examId: r.exam_id, candidateId: r.candidate_id })}>
+                  <Button size="sm" variant="outline" className="h-8 text-xs flex-1" onClick={() => setModal({ mode: "ekg", examId: r.exam_id ?? ensureExamForCandidateLocal(r.candidate_id).id, candidateId: r.candidate_id })}>
                     <Activity className="h-3 w-3 mr-1" /> EKG
                   </Button>
-                  <Button size="sm" variant="outline" className="h-8 text-xs flex-1" onClick={() => setModal({ mode: "radiology", examId: r.exam_id, candidateId: r.candidate_id })}>
+                  <Button size="sm" variant="outline" className="h-8 text-xs flex-1" onClick={() => setModal({ mode: "radiology", examId: r.exam_id ?? ensureExamForCandidateLocal(r.candidate_id).id, candidateId: r.candidate_id })}>
                     <Radio className="h-3 w-3 mr-1" /> Rontgen
                   </Button>
                   <Button size="sm" variant="ghost" className="h-8 text-xs" asChild>
-                    <Link to="/rikkes/$id" params={{ id: r.exam_id ?? r.candidate_id }} search={{ from: "hari-h", candidateId: r.candidate_id, selectionId: r.selection_id }}>
+                    <Link to="/rikkes/$id" params={{ id: r.exam_id ?? ensureExamForCandidateLocal(r.candidate_id).id }} search={{ from: "hari-h", candidateId: r.candidate_id, selectionId: r.selection_id }}>
                       <ExternalLink className="h-3 w-3 mr-1" /> Detail
                     </Link>
                   </Button>
                 </div>
-                <CandidateProgressPopover candidateId={r.candidate_id} candidateName={r.full_name} />
+                <CandidateProgressPopover candidateId={r.candidate_id} candidateName={r.display_name || r.full_name} />
               </CardContent>
             </Card>
           ))}
@@ -165,32 +196,33 @@ function HariHQueuePage() {
               {byStage[stage].map((r) => (
                 <Card key={r.exam_id} className="shadow-sm">
                   <CardContent className="p-3 space-y-2 text-xs">
-                    <div className="font-semibold text-sm leading-tight">{r.full_name}</div>
+                    <div className="font-semibold text-sm text-slate-900 break-words whitespace-normal leading-tight" title={r.full_name}>{r.display_name || r.full_name || "-"}</div>
+                <div className="text-xs text-slate-500">{r.test_number ? `No Test: ${r.test_number}` : `TMP: ${r.temporary_id || "-"}`}</div>
+                <div className="text-xs text-slate-500">{r.rank || "-"} / {r.nrp_nip || "-"}</div>
+                <div className="text-xs text-slate-500">{r.unit_position || "-"}</div>
                     <div>
                       <NoTestBadge testNumber={r.test_number} temporaryId={r.temporary_id} showLabel={false} />
                     </div>
-                    {r.rank && <div className="text-muted-foreground">{r.rank}</div>}
-                    {r.unit_position && <div className="text-muted-foreground truncate">{r.unit_position}</div>}
-                    <div className="flex flex-wrap gap-1">
+                                        <div className="flex flex-wrap gap-1">
                       <Badge variant="outline" className={INIT_STATUS_BADGE[r.ekg_initial_status as never] ?? ""}>EKG: {r.ekg_initial_status}</Badge>
                       <Badge variant="outline" className={INIT_STATUS_BADGE[r.radiology_initial_status as never] ?? ""}>RO: {r.radiology_initial_status}</Badge>
                     </div>
                     <div className="flex flex-wrap gap-1 pt-1">
                       <Button size="sm" variant="outline" className="h-7 text-[11px]"
-                        onClick={() => setModal({ mode: "ekg", examId: r.exam_id, candidateId: r.candidate_id })}>
+                        onClick={() => setModal({ mode: "ekg", examId: r.exam_id ?? ensureExamForCandidateLocal(r.candidate_id).id, candidateId: r.candidate_id })}>
                         <Activity className="h-3 w-3 mr-1" /> EKG
                       </Button>
                       <Button size="sm" variant="outline" className="h-7 text-[11px]"
-                        onClick={() => setModal({ mode: "radiology", examId: r.exam_id, candidateId: r.candidate_id })}>
+                        onClick={() => setModal({ mode: "radiology", examId: r.exam_id ?? ensureExamForCandidateLocal(r.candidate_id).id, candidateId: r.candidate_id })}>
                         <Radio className="h-3 w-3 mr-1" /> Rontgen
                       </Button>
                       <Button size="sm" variant="ghost" className="h-7 text-[11px]" asChild>
-                        <Link to="/rikkes/$id" params={{ id: r.exam_id ?? r.candidate_id }} search={{ from: "hari-h", candidateId: r.candidate_id, selectionId: r.selection_id }}>
+                        <Link to="/rikkes/$id" params={{ id: r.exam_id ?? ensureExamForCandidateLocal(r.candidate_id).id }} search={{ from: "hari-h", candidateId: r.candidate_id, selectionId: r.selection_id }}>
                           <ExternalLink className="h-3 w-3 mr-1" /> Detail
                         </Link>
                       </Button>
                     </div>
-                    <CandidateProgressPopover candidateId={r.candidate_id} candidateName={r.full_name} />
+                    <CandidateProgressPopover candidateId={r.candidate_id} candidateName={r.display_name || r.full_name} />
                   </CardContent>
                 </Card>
               ))}
