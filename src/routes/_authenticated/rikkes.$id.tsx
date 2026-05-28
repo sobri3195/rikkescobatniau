@@ -277,6 +277,14 @@ function RikkesDetail() {
     } catch (e: any) { toast.error(e.message); }
   }
 
+  const selectionLabel = useMemo(() => {
+    const db = getDb() as any;
+    const selectionId = cand?.selection_id;
+    if (!selectionId) return "";
+    const selection = (db.selections ?? []).find((s: any) => s.id === selectionId);
+    return selection?.selection_name ?? selection?.name ?? "";
+  }, [cand?.selection_id]);
+
   if (loading) {
     return <RikkesDetailSkeleton />;
   }
@@ -290,11 +298,6 @@ function RikkesDetail() {
   const locked = activeStatus === "Locked";
   const submitted = activeStatus === "Submitted" || activeStatus === "Approved";
   const readOnly = viewerOnly || locked || (submitted && !canEdit);
-  const selectionLabel = useMemo(() => {
-    const db = getDb() as any;
-    const selection = (db.selections ?? []).find((s: any) => s.id === cand?.selection_id);
-    return selection?.selection_name ?? selection?.name ?? "";
-  }, [cand?.selection_id]);
 
   return (
     <div className="p-6 lg:p-8 space-y-6 min-h-screen">
