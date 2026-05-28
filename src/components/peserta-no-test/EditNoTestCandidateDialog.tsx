@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { logAudit } from "@/lib/audit";
+import { updateCandidateLocal } from "@/lib/services/candidateService";
 
 export type EditCandidate = {
   id: string;
@@ -69,8 +69,7 @@ export function EditNoTestCandidateDialog({ open, onOpenChange, candidate, onSav
         address: form.address || null,
         registration_notes: form.registration_notes || null,
       };
-      const { error } = await supabase.from("candidates").update(payload as never).eq("id", form.id);
-      if (error) throw error;
+      updateCandidateLocal(form.id, payload);
       await logAudit({
         action: "edit_candidate_without_test_number",
         module: "peserta_tanpa_no_test",
