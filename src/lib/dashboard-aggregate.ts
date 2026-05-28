@@ -1,5 +1,5 @@
-import { supabase } from "@/integrations/supabase/client";
 import type { SelectionCardData } from "@/components/selection/SelectionCard";
+import { exportLocalDb, getDb, migrateLocalDb, nowIso, repairLocalDbRelations, saveDb } from "@/lib/localDb";
 
 export type DashboardSummary = {
   totalSelectionsActive: number;
@@ -14,81 +14,96 @@ export type DashboardSummary = {
   incomplete: number;
 };
 
-/**
- * Ambil daftar seleksi + ringkasan progress agregat per seleksi.
- * Hanya pakai data yang sudah dihitung trigger (`exams.hari_h_stage`, `progress_percentage`, `exam_status`).
- * 1x query exams + 1x query selections — agregasi di sisi client (jumlah seleksi puluhan, jumlah peserta ratusan→ribuan).
- */
-export async function fetchSelectionsWithStats(): Promise<{
-  selections: SelectionCardData[];
-  summary: DashboardSummary;
-}> {
-  const [sels, ex] = await Promise.all([
-    supabase
-      .from("selections")
-      .select("id,name,year_label,participant_label,location,status,is_default,institution_header_line_1,institution_header_line_2")
-      .order("is_default", { ascending: false })
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("exams")
-      .select("id,selection_id,exam_status,hari_h_stage,progress_percentage"),
-  ]);
+export type DashboardDebugInfo = {
+  localStorageKeyExists: boolean;
+  totalSelections: number;
+  activeSelections: number;
+  totalCandidates: number;
+  candidatesWithoutSelectionId: number;
+  candidatesWithoutExam: number;
+  totalExams: number;
+  examsWithoutCandidate: number;
+  totalExamSections: number;
+  filteredSelectionsCount: number;
+  prefilterSelectionsCount: number;
+  warningMissingSelection: boolean;
+};
 
-  if (sels.error) throw sels.error;
-  if (ex.error) throw ex.error;
+export function isSelectionActive(selection: any) {
+  const status = String(selection?.status ?? "active").trim().toLowerCase();
+  return status === "active" || status === "aktif" || status === "ongoing" || status === "berjalan" || status === "";
+}
 
-  const exams = (ex.data ?? []) as Array<{
-    id: string;
-    selection_id: string | null;
-    exam_status: string | null;
-    hari_h_stage: string | null;
-    progress_percentage: number | null;
-  }>;
+const normalizeText = (value: any, fallback = "-") => {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+};
 
-  // Group by selection
-  const bySel = new Map<string, typeof exams>();
-  for (const e of exams) {
-    if (!e.selection_id) continue;
-    const arr = bySel.get(e.selection_id) ?? [];
-    arr.push(e);
-    bySel.set(e.selection_id, arr);
-  }
+const normalizeSelection = (selection: any): SelectionCardData => ({
+  id: String(selection.id ?? ""),
+  name: normalizeText(selection.selection_name ?? selection.name ?? selection.title),
+  year_label: normalizeText(selection.year ?? selection.tahun ?? selection.academic_year),
+  participant_label: normalizeText(selection.type ?? selection.selection_type ?? selection.category),
+  location: normalizeText(selection.location ?? selection.lokasi ?? selection.panda),
+  status: normalizeText(selection.status ?? "Aktif"),
+  is_default: !!selection.is_default,
+  institution_header_line_1: selection.institution_header_line_1,
+  institution_header_line_2: selection.institution_header_line_2,
+});
 
-  const cards: SelectionCardData[] = (sels.data ?? []).map((s: any) => {
-    const list = bySel.get(s.id) ?? [];
-    const total = list.length;
-    const progSum = list.reduce((a, b) => a + (b.progress_percentage ?? 0), 0);
-    const stage = (st: string) => list.filter((x) => (x.hari_h_stage ?? "") === st).length;
-    const finalized = list.filter((x) => x.exam_status === "Finalized").length;
-    const inProgress = list.filter((x) => x.exam_status === "In Progress" || x.exam_status === "Pending Review").length;
-    const incomplete = list.filter((x) => (x.progress_percentage ?? 0) < 50 && x.exam_status !== "Finalized").length;
+export function loadDashboardLocalDb() {
+  migrateLocalDb();
+  repairLocalDbRelations();
+  const db = getDb() as any;
+
+  const selectionsAll = (db.selections ?? []).filter((s: any) => !s?.is_deleted && String(s?.status ?? "").toLowerCase() !== "deleted");
+  const selectionsActive = selectionsAll.filter(isSelectionActive).map(normalizeSelection).filter((s) => !!s.id && !!s.name);
+
+  const activeCandidates = (db.candidates ?? []).filter((c: any) => !c?.is_deleted && !c?.deleted_at);
+  const activeExams = (db.exams ?? []).filter((e: any) => !e?.is_deleted && !e?.deleted_at);
+
+  const cards = selectionsActive.map((selection) => {
+    const selectionCandidates = activeCandidates.filter((candidate: any) => candidate.selection_id === selection.id);
+    const selectionExams = activeExams.filter((exam: any) => selectionCandidates.some((candidate: any) => candidate.id === exam.candidate_id));
+    const total = selectionCandidates.length;
+    const progressSum = selectionExams.reduce((acc: number, exam: any) => acc + Number(exam.progress_percentage ?? 0), 0);
+    const finalized = selectionExams.filter((exam: any) => String(exam.exam_status ?? "") === "Finalized").length;
+    const inProgress = selectionExams.filter((exam: any) => String(exam.exam_status ?? "") !== "Finalized").length;
+    const waitingEkg = selectionExams.filter((exam: any) => String(exam.ekg_initial_status ?? "").toLowerCase() === "belum").length;
+    const waitingRontgen = selectionExams.filter((exam: any) => String(exam.radiology_initial_status ?? "").toLowerCase() === "belum").length;
+    const screening = selectionExams.filter((exam: any) => String(exam.hari_h_stage ?? "").toLowerCase().includes("screening")).length;
+    const subteam = selectionExams.filter((exam: any) => String(exam.hari_h_stage ?? "").toLowerCase().includes("subtim")).length;
+    const review = selectionExams.filter((exam: any) => String(exam.exam_status ?? "").toLowerCase().includes("review")).length;
+    const incomplete = selectionExams.filter((exam: any) => Number(exam.progress_percentage ?? 0) < 100).length;
+
     return {
-      ...s,
+      ...selection,
       stats: {
         total_candidates: total,
-        progress_avg: total > 0 ? progSum / total : 0,
+        progress_avg: total ? progressSum / total : 0,
         finalized,
         in_progress: inProgress,
         incomplete,
-        waiting_ekg: stage("Menunggu EKG") + stage("Menunggu Rontgen & EKG"),
-        waiting_rontgen: stage("Menunggu Rontgen") + stage("Menunggu Rontgen & EKG"),
-        screening: stage("Screening Hari-H"),
-        subteam: stage("Pemeriksaan Subtim"),
-        review: stage("Review"),
-        not_started: stage("Registrasi Awal"),
+        waiting_ekg: waitingEkg,
+        waiting_rontgen: waitingRontgen,
+        screening,
+        subteam,
+        review,
+        not_started: selectionExams.filter((exam: any) => String(exam.hari_h_stage ?? "").toLowerCase().includes("registrasi")).length,
       },
     };
   });
 
-  const activeCards = cards.filter((c) => (c.status ?? "").toLowerCase() === "aktif");
-  const sum = (k: keyof NonNullable<SelectionCardData["stats"]>) =>
-    activeCards.reduce((a, c) => a + (c.stats?.[k] ?? 0), 0);
+  const sum = (key: keyof NonNullable<SelectionCardData["stats"]>) => cards.reduce((acc, card) => acc + Number(card.stats?.[key] ?? 0), 0);
+  const candidatesWithoutSelectionId = activeCandidates.filter((candidate: any) => !candidate.selection_id).length;
+  const candidatesWithoutExam = activeCandidates.filter((candidate: any) => !activeExams.some((exam: any) => exam.candidate_id === candidate.id)).length;
+  const examsWithoutCandidate = activeExams.filter((exam: any) => !activeCandidates.some((candidate: any) => candidate.id === exam.candidate_id)).length;
 
   return {
     selections: cards,
     summary: {
-      totalSelectionsActive: activeCards.length,
-      totalCandidates: sum("total_candidates"),
+      totalSelectionsActive: cards.length,
+      totalCandidates: activeCandidates.length,
       inProgress: sum("in_progress"),
       finalized: sum("finalized"),
       waitingEkg: sum("waiting_ekg"),
@@ -97,6 +112,32 @@ export async function fetchSelectionsWithStats(): Promise<{
       subteam: sum("subteam"),
       review: sum("review"),
       incomplete: sum("incomplete"),
-    },
+    } as DashboardSummary,
+    debug: {
+      localStorageKeyExists: typeof window !== "undefined" ? window.localStorage.getItem("rikkes_tni_au_local_db_v1") !== null : false,
+      totalSelections: selectionsAll.length,
+      activeSelections: cards.length,
+      totalCandidates: activeCandidates.length,
+      candidatesWithoutSelectionId,
+      candidatesWithoutExam,
+      totalExams: activeExams.length,
+      examsWithoutCandidate,
+      totalExamSections: (db.exam_sections ?? []).length,
+      filteredSelectionsCount: cards.length,
+      prefilterSelectionsCount: selectionsAll.length,
+      warningMissingSelection: selectionsAll.length === 0 && activeCandidates.some((candidate: any) => !!candidate.selection_id),
+    } as DashboardDebugInfo,
   };
+}
+
+export function runDashboardMigrationAndRepair() {
+  migrateLocalDb();
+  repairLocalDbRelations();
+  const db = getDb();
+  db.meta = { ...(db.meta ?? {}), updated_at: nowIso() };
+  saveDb(db as any);
+}
+
+export function exportLocalDbJson() {
+  return exportLocalDb();
 }

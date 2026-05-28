@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/use-auth";
 import { isPimpinanViewer } from "@/lib/permissions";
 import { usePermissions } from "@/lib/permissions/use-permissions";
 import { PERMISSIONS } from "@/lib/permissions/keys";
-import { fetchSelectionsWithStats, type DashboardSummary } from "@/lib/dashboard-aggregate";
+import { exportLocalDbJson, loadDashboardLocalDb, runDashboardMigrationAndRepair, type DashboardDebugInfo, type DashboardSummary, isSelectionActive } from "@/lib/dashboard-aggregate";
 import { SelectionCard, type SelectionCardData } from "@/components/selection/SelectionCard";
 import { toast } from "sonner";
 import { logAudit } from "@/lib/audit";
@@ -44,19 +44,23 @@ function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [debug, setDebug] = useState<DashboardDebugInfo | null>(null);
 
   const [search, setSearch] = useState("");
   const [yearFilter, setYearFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("aktif");
   const [locationFilter, setLocationFilter] = useState("all");
 
-  async function load() {
+  async function load(showToast = false) {
     setLoading(true);
     setErr(null);
     try {
-      const data = await fetchSelectionsWithStats();
+      runDashboardMigrationAndRepair();
+      const data = loadDashboardLocalDb();
       setSelections(data.selections);
       setSummary(data.summary);
+      setDebug(data.debug);
+      if (showToast) toast.success("Dashboard berhasil diperbarui");
     } catch (e: any) {
       setErr(e?.message ?? "Gagal memuat data dashboard");
     } finally {
@@ -78,9 +82,12 @@ function Dashboard() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return selections.filter((s) => {
-      if (statusFilter !== "all" && (s.status ?? "").toLowerCase() !== statusFilter) return false;
-      if (yearFilter !== "all" && s.year_label !== yearFilter) return false;
-      if (locationFilter !== "all" && (s.location ?? "") !== locationFilter) return false;
+      if (statusFilter !== "all") {
+        if (statusFilter === "aktif" && !isSelectionActive({ status: s.status })) return false;
+        if (statusFilter !== "aktif" && (s.status ?? "").toLowerCase() !== statusFilter) return false;
+      }
+      if (yearFilter !== "all" && String(s.year_label) !== String(yearFilter)) return false;
+      if (locationFilter !== "all" && String(s.location ?? "") !== String(locationFilter)) return false;
       if (!q) return true;
       return (
         s.name.toLowerCase().includes(q) ||
@@ -113,7 +120,7 @@ function Dashboard() {
               </Link>
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={() => void load(true)} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} /> Refresh
           </Button>
         </div>
@@ -165,7 +172,7 @@ function Dashboard() {
               {locations.map((l) => (<SelectItem key={l} value={l}>{l}</SelectItem>))}
             </SelectContent>
           </Select>
-          <div className="text-xs text-muted-foreground">{filtered.length} / {selections.length}</div>
+          <div className="text-xs text-muted-foreground">{filtered.length} / {selections.length} (sebelum filter: {selections.length})</div>
         </CardContent>
       </Card>
 
@@ -183,6 +190,36 @@ function Dashboard() {
             Tidak ada seleksi yang cocok dengan filter.
           </div>
         )}
+
+      {!loading && filtered.length === 0 && roles.includes("super_admin") && debug && (
+        <Card className="border-amber-200 bg-amber-50/40">
+          <CardContent className="p-4 space-y-2 text-xs">
+            <div className="font-semibold text-amber-900">Debug Dashboard (Super Admin)</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-1 text-amber-900">
+              <div>localStorage key exists: {String(debug.localStorageKeyExists)}</div>
+              <div>total selections: {debug.totalSelections}</div>
+              <div>active selections: {debug.activeSelections}</div>
+              <div>total candidates: {debug.totalCandidates}</div>
+              <div>candidates without selection_id: {debug.candidatesWithoutSelectionId}</div>
+              <div>candidates without exam: {debug.candidatesWithoutExam}</div>
+              <div>total exams: {debug.totalExams}</div>
+              <div>exams without candidate: {debug.examsWithoutCandidate}</div>
+              <div>total exam_sections: {debug.totalExamSections}</div>
+              <div>active filter: status={statusFilter}, year={yearFilter}, location={locationFilter}, q={search || "-"}</div>
+              <div>filtered selections count: {filtered.length}</div>
+            </div>
+            {debug.warningMissingSelection && (
+              <div className="text-red-700 font-medium">Ada peserta tetapi selection tidak ditemukan.</div>
+            )}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button size="sm" variant="outline" onClick={() => { runDashboardMigrationAndRepair(); void load(true); }}>Run Migration</Button>
+              <Button size="sm" variant="outline" onClick={() => { runDashboardMigrationAndRepair(); void load(true); }}>Repair Relations</Button>
+              <Button size="sm" variant="outline" onClick={() => { setSearch(""); setYearFilter("all"); setStatusFilter("aktif"); setLocationFilter("all"); }}>Reset Filter</Button>
+              <Button size="sm" variant="outline" onClick={() => { const blob = new Blob([exportLocalDbJson()], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "local-db-export.json"; a.click(); URL.revokeObjectURL(a.href); }}>Export Local DB JSON</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
         {!loading && filtered.length > 0 && (
           <div className="grid md:grid-cols-2 gap-3">
             {filtered.map((s) => (
