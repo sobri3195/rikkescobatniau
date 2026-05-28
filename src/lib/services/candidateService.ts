@@ -1,30 +1,67 @@
 import { generateId, getDb, getLocalSession, nowIso, saveDb } from "@/lib/localDb";
 import { addAuditLogLocal } from "@/lib/services/auditService";
-import { createExamForCandidateLocal, ensureExamForCandidateLocal } from "@/lib/services/examService";
+import {
+  createExamForCandidateLocal,
+  ensureExamForCandidateLocal,
+} from "@/lib/services/examService";
 import { buildParticipantRowLocal } from "@/lib/services/participantRowService";
 import { refreshAllDerivedDataLocal, syncCandidateRelationsLocal } from "@/lib/services/syncService";
 
 function generateTemporaryId(db: any) {
   const d = new Date();
   const ymd = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
-  const n = ((db.candidates ?? []).filter((c: any) => String(c.temporary_id ?? "").startsWith(`TMP-${ymd}-`)).length + 1).toString().padStart(4, "0");
+  const n = (
+    (db.candidates ?? []).filter((c: any) => String(c.temporary_id ?? "").startsWith(`TMP-${ymd}-`))
+      .length + 1
+  )
+    .toString()
+    .padStart(4, "0");
   return `TMP-${ymd}-${n}`;
 }
 
-export function listCandidatesLocal() { return (getDb() as any).candidates ?? []; }
-export function listCandidatesBySelectionLocal(selectionId: string) { return listCandidatesLocal().filter((c: any) => c.selection_id === selectionId); }
+export function listCandidatesLocal() {
+  return (getDb() as any).candidates ?? [];
+}
+export function listCandidatesBySelectionLocal(selectionId: string) {
+  return listCandidatesLocal().filter((c: any) => c.selection_id === selectionId);
+}
 
 export function listCandidatesWithoutTestNumberLocal(filters: any = {}) {
+  if (filters?.ensureExam) {
+    const repairDb = getDb() as any;
+    for (const candidate of repairDb.candidates ?? []) {
+      if (!candidate.is_deleted && !candidate.deleted_at) ensureExamForCandidateLocal(candidate.id);
+    }
+  }
   const db = getDb() as any;
-  let rows = (db.candidates ?? []).filter((c: any) => filters.showDeleted ? !!c.is_deleted : !c.is_deleted).filter((c: any) => {
-    const noTestEmpty = !c.test_number || String(c.test_number).trim() === "" || c.test_number === "-";
-    return noTestEmpty || c.test_number_status === "pending" || c.no_test_missing === true;
-  }).map((candidate: any) => {
-    if (filters?.ensureExam) ensureExamForCandidateLocal(candidate.id);
-    return buildParticipantRowLocal(candidate, db);
-  });
+  let rows = (db.candidates ?? [])
+    .filter((c: any) => (filters.showDeleted ? !!c.is_deleted : !c.is_deleted))
+    .filter((c: any) => {
+      const noTestEmpty =
+        !c.test_number || String(c.test_number).trim() === "" || c.test_number === "-";
+      return noTestEmpty || c.test_number_status === "pending" || c.no_test_missing === true;
+    })
+    .map((candidate: any) => buildParticipantRowLocal(candidate, db));
   if (filters.selection_id) rows = rows.filter((r: any) => r.selection_id === filters.selection_id);
-  if (filters.search) { const q = String(filters.search).toLowerCase(); rows = rows.filter((r: any) => [r.full_name, r.temporary_id, r.nrp_nip, r.unit_position, r.rank, r.panda, r.pok_korp, r.test_number].some((v: any) => String(v ?? "").toLowerCase().includes(q))); }
+  if (filters.search) {
+    const q = String(filters.search).toLowerCase();
+    rows = rows.filter((r: any) =>
+      [
+        r.full_name,
+        r.temporary_id,
+        r.nrp_nip,
+        r.unit_position,
+        r.rank,
+        r.panda,
+        r.pok_korp,
+        r.test_number,
+      ].some((v: any) =>
+        String(v ?? "")
+          .toLowerCase()
+          .includes(q),
+      ),
+    );
+  }
   return rows;
 }
 
@@ -55,7 +92,9 @@ export function updateCandidateLocal(id: string, patch: any) {
     test_number: normalizedTestNumber,
     test_number_status: normalizedTestNumber ? "assigned" : "pending",
     no_test_missing: !normalizedTestNumber,
-    temporary_id: normalizedTestNumber ? (patch?.temporary_id ?? before.temporary_id ?? "") : (patch?.temporary_id ?? before.temporary_id ?? generateTemporaryId(db)),
+    temporary_id: normalizedTestNumber
+      ? (patch?.temporary_id ?? before.temporary_id ?? "")
+      : (patch?.temporary_id ?? before.temporary_id ?? generateTemporaryId(db)),
     updated_at: now,
     updated_by: session?.user_id ?? "local_user",
   };
@@ -63,8 +102,16 @@ export function updateCandidateLocal(id: string, patch: any) {
   db.candidates[index] = next;
 
   if (prevSelectionId !== next.selection_id) {
-    db.exams = (db.exams ?? []).map((exam: any) => exam.candidate_id === id ? { ...exam, selection_id: next.selection_id, updated_at: now } : exam);
-    db.exam_sections = (db.exam_sections ?? []).map((section: any) => section.candidate_id === id ? { ...section, selection_id: next.selection_id, updated_at: now } : section);
+    db.exams = (db.exams ?? []).map((exam: any) =>
+      exam.candidate_id === id
+        ? { ...exam, selection_id: next.selection_id, updated_at: now }
+        : exam,
+    );
+    db.exam_sections = (db.exam_sections ?? []).map((section: any) =>
+      section.candidate_id === id
+        ? { ...section, selection_id: next.selection_id, updated_at: now }
+        : section,
+    );
   }
 
   db.audit_logs = [
@@ -87,24 +134,47 @@ export function updateCandidateLocal(id: string, patch: any) {
   refreshAllDerivedDataLocal();
   return next;
 }
-export function softDeleteCandidateLocal(id: string) { return updateCandidateLocal(id, { is_deleted: true, deleted_at: nowIso(), deleted_by: getLocalSession()?.user_id ?? "system_local" }); }
-export function deleteCandidateLocal(id: string) { return softDeleteCandidateLocal(id); }
-export function restoreCandidateLocal(id: string) { return updateCandidateLocal(id, { is_deleted: false, deleted_at: null, deleted_by: null }); }
-
-
-export function getCandidateByIdLocal(candidateId: string) {
-  return ((getDb() as any).candidates ?? []).find((candidate: any) => candidate.id === candidateId && !candidate.is_deleted) ?? null;
+export function softDeleteCandidateLocal(id: string) {
+  return updateCandidateLocal(id, {
+    is_deleted: true,
+    deleted_at: nowIso(),
+    deleted_by: getLocalSession()?.user_id ?? "system_local",
+  });
+}
+export function deleteCandidateLocal(id: string) {
+  return softDeleteCandidateLocal(id);
+}
+export function restoreCandidateLocal(id: string) {
+  return updateCandidateLocal(id, { is_deleted: false, deleted_at: null, deleted_by: null });
 }
 
-export function findDuplicateTestNumberLocal({ selectionId, testNumber, excludeCandidateId }: { selectionId: string; testNumber: string; excludeCandidateId?: string; }) {
+export function getCandidateByIdLocal(candidateId: string) {
+  return (
+    ((getDb() as any).candidates ?? []).find(
+      (candidate: any) => candidate.id === candidateId && !candidate.is_deleted,
+    ) ?? null
+  );
+}
+
+export function findDuplicateTestNumberLocal({
+  selectionId,
+  testNumber,
+  excludeCandidateId,
+}: {
+  selectionId: string;
+  testNumber: string;
+  excludeCandidateId?: string;
+}) {
   const db = getDb() as any;
   const normalizedTestNumber = String(testNumber ?? "").trim();
   if (!normalizedTestNumber) return null;
-  return (db.candidates ?? []).find((candidate: any) => {
-    const sameSelection = candidate.selection_id === selectionId;
-    const sameTestNumber = String(candidate.test_number ?? "").trim() === normalizedTestNumber;
-    const notSelf = candidate.id !== excludeCandidateId;
-    const notDeleted = !candidate.is_deleted && !candidate.deleted_at;
-    return sameSelection && sameTestNumber && notSelf && notDeleted;
-  }) ?? null;
+  return (
+    (db.candidates ?? []).find((candidate: any) => {
+      const sameSelection = candidate.selection_id === selectionId;
+      const sameTestNumber = String(candidate.test_number ?? "").trim() === normalizedTestNumber;
+      const notSelf = candidate.id !== excludeCandidateId;
+      const notDeleted = !candidate.is_deleted && !candidate.deleted_at;
+      return sameSelection && sameTestNumber && notSelf && notDeleted;
+    }) ?? null
+  );
 }
