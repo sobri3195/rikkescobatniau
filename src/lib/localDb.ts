@@ -48,6 +48,29 @@ export function migrateLocalDb(input?: any): LocalDb {
   const base: any = createEmptyDb();
   for (const k of Object.keys(base)) if (db[k] === undefined) db[k] = base[k];
   db.settings = { ...base.settings, ...(db.settings ?? {}) };
+  const requiredCollections = [
+    "users",
+    "selections",
+    "candidates",
+    "exams",
+    "exam_sections",
+    "medical_history_forms",
+    "exam_radiology",
+    "exam_cardiology",
+    "exam_neurology",
+    "exam_laboratory",
+    "exam_ent",
+    "exam_surgery",
+    "exam_eye",
+    "exam_dental",
+    "exam_psychiatry",
+    "medical_attachments",
+    "notifications",
+    "audit_logs",
+  ];
+  for (const key of requiredCollections) {
+    if (!Array.isArray(db[key])) db[key] = [];
+  }
   db.candidates = (db.candidates ?? []).map((c: any) => ({ ...c, id: c.id ?? generateId("cand"), is_deleted: c.is_deleted ?? false, test_number: c.test_number ?? "", no_test_missing: c.no_test_missing ?? !String(c.test_number ?? "").trim(), test_number_status: c.test_number_status ?? (String(c.test_number ?? "").trim() ? "assigned" : "pending"), temporary_id: c.temporary_id || (String(c.test_number ?? "").trim() ? "" : `TMP-${new Date().toISOString().slice(0,10).replace(/-/g,"")}-${String(Math.floor(Math.random()*9999)+1).padStart(4,"0")}`) }));
   repairLocalDbRelations(db);
   saveDb(db);
