@@ -112,7 +112,8 @@ export function updateCandidateLocal(id: string, patch: any) {
   saveDb(db);
   return next;
 }
-export function deleteCandidateLocal(id: string) { return updateCandidateLocal(id, { is_deleted: true, deleted_at: nowIso(), deleted_by: getLocalSession()?.user_id ?? "system_local" }); }
+export function softDeleteCandidateLocal(id: string) { return updateCandidateLocal(id, { is_deleted: true, deleted_at: nowIso(), deleted_by: getLocalSession()?.user_id ?? "system_local" }); }
+export function deleteCandidateLocal(id: string) { return softDeleteCandidateLocal(id); }
 export function restoreCandidateLocal(id: string) { return updateCandidateLocal(id, { is_deleted: false, deleted_at: null, deleted_by: null }); }
 
 
