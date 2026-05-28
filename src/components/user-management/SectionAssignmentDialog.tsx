@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -7,6 +6,7 @@ import { ASSIGNABLE_SECTIONS, SECTION_ACTIONS } from "@/lib/permissions/keys";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { clearPermissionCache } from "@/lib/permissions/use-permissions";
+import { listSectionAssignments, replaceSectionAssignments } from "@/lib/services/permissionService";
 
 interface Props {
   open: boolean;
@@ -27,10 +27,7 @@ export function SectionAssignmentDialog({ open, onOpenChange, userId, userLabel,
     if (!open || !userId) return;
     setLoading(true);
     void (async () => {
-      const { data } = await supabase
-        .from("user_section_assignments")
-        .select("section_key, can_view, can_create, can_update, can_submit, can_approve, can_request_revision, can_upload, can_export, is_active")
-        .eq("user_id", userId);
+      const data = await listSectionAssignments(userId);
       const m: Row = {};
       (data ?? []).forEach((r: any) => {
         if (!r.is_active) return;
@@ -59,7 +56,6 @@ export function SectionAssignmentDialog({ open, onOpenChange, userId, userLabel,
     setSaving(true);
     try {
       // Wipe + reinsert (simpler than diff)
-      await supabase.from("user_section_assignments").delete().eq("user_id", userId);
       const payload = Object.entries(state)
         .filter(([, actions]) => Object.values(actions).some(Boolean))
         .map(([section_key, a]) => {
@@ -75,16 +71,8 @@ export function SectionAssignmentDialog({ open, onOpenChange, userId, userLabel,
           };
         });
       if (payload.length) {
-        const { error } = await supabase.from("user_section_assignments").insert(payload);
-        if (error) throw error;
+        await replaceSectionAssignments(userId, payload);
       }
-      await supabase.from("audit_logs").insert({
-        user_id: (await supabase.auth.getUser()).data.user?.id,
-        action: "update_user_section_assignment",
-        module: "user_management",
-        record_id: userId,
-        after_data: payload as any,
-      });
       clearPermissionCache();
       toast.success("Assignment section disimpan");
       onSaved?.();

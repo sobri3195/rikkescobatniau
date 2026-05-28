@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
+import { listRolePermissions, listSectionAssignments, listUserRoles } from "@/lib/services/permissionService";
 
 interface Props {
   open: boolean;
@@ -22,20 +22,14 @@ export function EffectivePermissionsDialog({ open, onOpenChange, userId, userLab
     if (!open || !userId) return;
     setLoading(true);
     void (async () => {
-      const [{ data: ur }, { data: assigns }] = await Promise.all([
-        supabase.from("user_roles").select("role").eq("user_id", userId),
-        supabase.from("user_section_assignments")
-          .select("section_key, section_name, can_view, can_create, can_update, can_submit, can_approve, can_upload, can_export, is_active")
-          .eq("user_id", userId).eq("is_active", true),
+      const [rs, assigns] = await Promise.all([
+        listUserRoles(userId),
+        listSectionAssignments(userId),
       ]);
-      const rs = (ur ?? []).map((r: any) => r.role as string);
       setRoles(rs);
       setSections(assigns ?? []);
-      const { data: rp } = await supabase
-        .from("role_permissions")
-        .select("permission_key, allowed")
-        .in("role", rs.length ? (rs as any) : ["viewer"]);
-      const list = (rp ?? []).filter((r: any) => r.allowed).map((r: any) => r.permission_key);
+      const rp = await listRolePermissions(rs.length ? rs : ["viewer"]);
+      const list = (rp ?? []).map((r: any) => r.permission_key);
       setWildcard(list.includes("*") || rs.includes("super_admin") || rs.includes("tester"));
       setPerms(Array.from(new Set(list.filter((k) => k !== "*"))).sort());
       setLoading(false);

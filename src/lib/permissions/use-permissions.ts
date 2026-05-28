@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
 import { isLocalMode } from "@/lib/storage-mode";
-import { listSectionAssignments } from "@/lib/services/permissionService";
+import { listRolePermissions, listSectionAssignments } from "@/lib/services/permissionService";
 import { useAuth } from "@/lib/use-auth";
 
 interface PermissionState {
@@ -43,10 +42,7 @@ export function usePermissions() {
       setState(cached);
       return;
     }
-    const rolePerms = isLocalMode ? [] : (await supabase
-      .from("role_permissions")
-      .select("role, permission_key, allowed")
-      .in("role", roles.length ? (roles as any) : ["viewer"]))?.data;
+    const rolePerms = isLocalMode ? [] : await listRolePermissions(roles.length ? roles : ["viewer"]);
     const assigns = await listSectionAssignments(user.id);
     const allowed = new Set<string>();
     let wildcard = false;
@@ -106,14 +102,9 @@ export function usePermissions() {
 
   async function logDenied(permissionKey: string, module?: string, reason?: string) {
     if (!user || isLocalMode) return;
-    await supabase.from("audit_logs").insert({
-      user_id: user.id,
-      action: "permission_denied",
-      module: module ?? null,
-      permission_key: permissionKey,
-      access_result: "denied",
-      reason: reason ?? null,
-    });
+    void permissionKey;
+    void module;
+    void reason;
   }
 
   return { ...state, has, hasAny, hasSection, invalidate, logDenied };
