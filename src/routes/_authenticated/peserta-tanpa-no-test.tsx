@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -33,6 +32,8 @@ import { QuickSupportingModal } from "@/components/hari-h/QuickSupportingModal";
 import { exportLaporanXlsx, exportLaporanPdf } from "@/lib/peserta-no-test/laporan-export";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { STAGE_BADGE, INIT_STATUS_BADGE, type HariHStage } from "@/lib/hari-h-stage";
+import { listCandidatesWithoutTestNumberLocal } from "@/lib/services/candidateService";
+import { listSelectionsLocal } from "@/lib/localDb";
 
 export const Route = createFileRoute("/_authenticated/peserta-tanpa-no-test")({
   component: PesertaTanpaNoTestPage,
@@ -114,65 +115,24 @@ function PesertaTanpaNoTestPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const query = supabase
-      .from("candidates")
-      .select(
-        `id, full_name, temporary_id, test_number, test_number_status,
-         nrp_nip, rank, unit_position, pok_korp, panda, group_name, gender,
-         birth_place, birth_date, phone, address, registration_notes,
-         selection_id, created_at, deleted_at, delete_reason,
-         bag_number, class_group, pnd_code, serial_number,
-         selections(name),
-         exams(id, hari_h_stage, ekg_initial_status, radiology_initial_status)`,
-      )
-      .or("test_number.is.null,test_number.eq.,test_number.like.TMP-*")
-      .order("created_at", { ascending: false })
-      .limit(1000);
-    if (!showDeleted) query.is("deleted_at", null);
-    const { data } = await query;
-    const mapped: Row[] = ((data ?? []) as any[]).map((r) => {
-      const ex = Array.isArray(r.exams) ? r.exams[0] : r.exams;
-      return {
-        id: r.id,
-        full_name: r.full_name,
-        temporary_id: r.temporary_id,
-        test_number: r.test_number,
-        test_number_status: r.test_number_status ?? "Belum Ada",
-        nrp_nip: r.nrp_nip,
-        rank: r.rank,
-        unit_position: r.unit_position,
-        pok_korp: r.pok_korp,
-        panda: r.panda,
-        group_name: r.group_name,
-        gender: r.gender,
-        birth_place: r.birth_place,
-        birth_date: r.birth_date,
-        phone: r.phone,
-        address: r.address,
-        registration_notes: r.registration_notes,
-        selection_id: r.selection_id,
-        selection_name: r.selections?.name,
-        created_at: r.created_at,
-        deleted_at: r.deleted_at,
-        delete_reason: r.delete_reason ?? null,
-        exam_id: ex?.id ?? null,
-        hari_h_stage: (ex?.hari_h_stage ?? null) as HariHStage | null,
-        ekg_initial_status: ex?.ekg_initial_status ?? "Belum Diisi",
-        radiology_initial_status: ex?.radiology_initial_status ?? "Belum Diisi",
-        bag_number: r.bag_number ?? null,
-        class_group: r.class_group ?? null,
-        pnd_code: r.pnd_code ?? null,
-        serial_number: r.serial_number ?? null,
-      };
-    });
+    const data = listCandidatesWithoutTestNumberLocal({ showDeleted });
+    const mapped: Row[] = (data as any[]).map((r) => ({
+      id: r.id, full_name: r.full_name, temporary_id: r.temporary_id ?? null, test_number: r.test_number ?? null,
+      test_number_status: r.test_number_status ?? "pending", nrp_nip: r.nrp_nip ?? null, rank: r.rank ?? null,
+      unit_position: r.unit_position ?? null, pok_korp: r.pok_korp ?? null, panda: r.panda ?? null, group_name: r.group_name ?? null,
+      gender: r.gender ?? null, birth_place: r.birth_place ?? null, birth_date: r.birth_date ?? null, phone: r.phone ?? null, address: r.address ?? null, registration_notes: r.registration_notes ?? null,
+      selection_id: r.selection_id, selection_name: r.selection_name, created_at: r.created_at, deleted_at: r.deleted_at ?? null, delete_reason: r.delete_reason ?? null,
+      exam_id: r.exam_id ?? null, hari_h_stage: (r.hari_h_stage ?? null) as HariHStage | null, ekg_initial_status: r.ekg_initial_status ?? "Belum", radiology_initial_status: r.radiology_initial_status ?? "Belum",
+      bag_number: r.bag_number ?? null, class_group: r.class_group ?? null, pnd_code: r.pnd_code ?? null, serial_number: r.serial_number ?? null,
+    }));
     setRows(mapped);
     setLoading(false);
   }, [showDeleted]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    supabase.from("selections").select("id, name").order("created_at", { ascending: false }).limit(100)
-      .then(({ data }) => setSelections((data ?? []) as never));
+    const data = listSelectionsLocal() as any[];
+    setSelections(data.map((s) => ({ id: s.id, name: s.selection_name ?? s.name ?? "-" })));
   }, []);
 
   async function doExport(kind: "xlsx" | "pdf") {
