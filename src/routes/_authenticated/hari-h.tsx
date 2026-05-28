@@ -11,7 +11,7 @@ import { HARI_H_STAGES, STAGE_BADGE, INIT_STATUS_BADGE, type HariHStage, recompu
 import { QuickSupportingModal } from "@/components/hari-h/QuickSupportingModal";
 import { NoTestBadge } from "@/components/app/NoTestBadge";
 import { CandidateProgressPopover } from "@/components/candidate/CandidateProgressPopover";
-import { getDb } from "@/lib/localDb";
+import { buildHariHQueueRowsLocal } from "@/lib/services/hariHService";
 
 export const Route = createFileRoute("/_authenticated/hari-h")({
   component: HariHQueuePage,
@@ -36,40 +36,6 @@ type Row = {
 
 
 
-function buildHariHQueueRowsLocal(): Row[] {
-  const db = getDb() as any;
-  const candidates = (db.candidates ?? []).filter((candidate: any) => !candidate.is_deleted && !candidate.deleted_at);
-
-  return candidates.map((candidate: any) => {
-    const exam = (db.exams ?? []).find((item: any) => item.candidate_id === candidate.id && !item.is_deleted);
-    const fullName =
-      candidate.full_name ??
-      candidate.name ??
-      candidate.nama ??
-      candidate.candidate?.full_name ??
-      candidate.candidates?.full_name ??
-      "-";
-    const testNumber = String(candidate.test_number ?? "").trim();
-    const temporaryId = String(candidate.temporary_id ?? "").trim();
-
-    return {
-      candidate_id: candidate.id,
-      exam_id: exam?.id ?? null,
-      selection_id: candidate.selection_id ?? exam?.selection_id ?? null,
-      hari_h_stage: (exam?.hari_h_stage ?? "Registrasi Awal") as HariHStage,
-      ekg_initial_status: exam?.ekg_initial_status ?? "Belum Diisi",
-      radiology_initial_status: exam?.radiology_initial_status ?? "Belum Diisi",
-      full_name: fullName,
-      display_name: fullName,
-      rank: candidate.rank ?? candidate.pangkat ?? null,
-      nrp_nip: candidate.nrp_nip ?? candidate.nrp ?? candidate.nip ?? null,
-      unit_position: candidate.unit_position ?? candidate.unit ?? candidate.satuan ?? null,
-      test_number: testNumber || null,
-      temporary_id: temporaryId || null,
-      display_identifier: testNumber || temporaryId || "-",
-    };
-  });
-}
 
 function HariHQueuePage() {
   const [rows, setRows] = useState<Row[]>([]);
