@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { isLocalMode } from "@/lib/storage-mode";
+import { listSectionAssignments } from "@/lib/services/permissionService";
 import { useAuth } from "@/lib/use-auth";
 
 interface PermissionState {
@@ -41,17 +43,11 @@ export function usePermissions() {
       setState(cached);
       return;
     }
-    const [{ data: rolePerms }, { data: assigns }] = await Promise.all([
-      supabase
-        .from("role_permissions")
-        .select("role, permission_key, allowed")
-        .in("role", roles.length ? (roles as any) : ["viewer"]),
-      supabase
-        .from("user_section_assignments")
-        .select("section_key, can_view, can_create, can_update, can_submit, can_approve, can_request_revision, can_upload, can_export, is_active")
-        .eq("user_id", user.id)
-        .eq("is_active", true),
-    ]);
+    const rolePerms = isLocalMode ? [] : (await supabase
+      .from("role_permissions")
+      .select("role, permission_key, allowed")
+      .in("role", roles.length ? (roles as any) : ["viewer"]))?.data;
+    const assigns = await listSectionAssignments(user.id);
     const allowed = new Set<string>();
     let wildcard = false;
     (rolePerms ?? []).forEach((r: any) => {
@@ -109,7 +105,7 @@ export function usePermissions() {
   }, [user, load]);
 
   async function logDenied(permissionKey: string, module?: string, reason?: string) {
-    if (!user) return;
+    if (!user || isLocalMode) return;
     await supabase.from("audit_logs").insert({
       user_id: user.id,
       action: "permission_denied",
