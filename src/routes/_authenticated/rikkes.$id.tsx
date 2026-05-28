@@ -56,6 +56,7 @@ type Group = {
 function RikkesDetail() {
   const { id } = Route.useParams();
   const search = Route.useSearch() as any;
+
   const navigate = useNavigate();
   const { roles } = useAuth();
   const [cand, setCand] = useState<any>(null);
@@ -86,14 +87,26 @@ function RikkesDetail() {
   const canEdit = !viewerOnly && (can.editMedical(roles) || can.editCandidate(roles));
 
   const load = useCallback(async () => {
-    const resolved = resolveRikkesDetailLocal(id, {
+    let resolved = resolveRikkesDetailLocal(id, {
       candidateId: search?.candidateId,
       selectionId: search?.selectionId,
       temporaryId: search?.temporaryId,
       testNumber: search?.testNumber,
     });
-    setCand(resolved.candidate ?? null);
-    setExam(resolved.exam ?? null);
+    let nextExam = resolved.exam ?? null;
+    const nextCandidate = resolved.candidate ?? null;
+    if (!nextExam && nextCandidate?.id) {
+      nextExam = ensureExamForCandidateLocal(nextCandidate.id);
+      resolved = resolveRikkesDetailLocal(nextExam.id, {
+        candidateId: nextCandidate.id,
+        selectionId: nextCandidate.selection_id ?? search?.selectionId ?? null,
+        temporaryId: search?.temporaryId ?? null,
+        testNumber: search?.testNumber ?? null,
+      });
+      nextExam = resolved.exam ?? nextExam;
+    }
+    setCand(nextCandidate);
+    setExam(nextExam);
     setGroups((resolved.sections ?? []).map((g: any) => ({
       id: g.id,
       group_key: g.section_key,
@@ -113,11 +126,6 @@ function RikkesDetail() {
     });
   }, [id, search]);
 
-  const createExamNow = useCallback(() => {
-    if (!cand?.id) return;
-    const createdExam = ensureExamForCandidateLocal(cand.id);
-    navigate({ to: "/rikkes/$id", params: { id: createdExam.id }, search: { candidateId: cand.id, selectionId: cand.selection_id, from: "detail-fallback" } as any });
-  }, [cand, navigate]);
 
   useEffect(() => {
     load();
@@ -275,10 +283,6 @@ function RikkesDetail() {
   if (!cand) {
     return <div className="p-8 space-y-3"><div className="text-slate-700 font-semibold">Peserta tidak ditemukan</div><div className="text-slate-500 text-sm">Data peserta tidak dapat ditemukan berdasarkan ID yang dikirim dari halaman sebelumnya.</div><div className="text-xs text-slate-500">id={id} candidateId={String(search?.candidateId ?? "-")} selectionId={String(search?.selectionId ?? "-")}</div></div>;
   }
-  if (cand && !exam) {
-    return <div className="p-8 space-y-3"><div className="text-slate-700 font-semibold">Data peserta ditemukan, tetapi data pemeriksaan belum dibuat.</div><Button onClick={createExamNow}>Buat Exam Sekarang</Button></div>;
-  }
-
   const activeGroup = getGroup(active);
   const activeStatusRaw = activeGroup?.status ?? "Draft";
   const activeMap: Record<string, string> = { neurologi_subtim: "neurologi", laboratorium: "laboratorium", psikologi_subtim: "jiwa_keswa" };
@@ -364,7 +368,7 @@ function RikkesDetail() {
                 <FileText className="h-4 w-4 mr-2" /> Preview & Finalisasi PDF
               </Button>
               {(roles.includes("super_admin") || roles.includes("admin")) && exam?.id && (
-                <Button variant="outline" className="w-full" onClick={() => { syncNeurologiLabKeswaStatusLocal(exam.id); void load(); toast.success("Status Neurologi, Laboratorium, dan Keswa berhasil disinkronkan."); }}>Sinkronkan Status Formulir</Button>
+                <Button variant="outline" className="w-full" onClick={() => { if (exam?.id) { syncNeurologiLabKeswaStatusLocal(exam.id); } void load(); toast.success("Status Neurologi, Laboratorium, dan Keswa berhasil disinkronkan."); }}>Sinkronkan Status Formulir</Button>
               )}
             </div>
           </div>
