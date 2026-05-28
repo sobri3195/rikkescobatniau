@@ -60,7 +60,7 @@ function RikkesDetail() {
   const navigate = useNavigate();
   const { roles } = useAuth();
   const [cand, setCand] = useState<any>(null);
-  const [exam, setExam] = useState<any>(null);
+  const [currentExam, setCurrentExam] = useState<any>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [active, setActive] = useState<RikkesGroupKey>("identitas_anamnesis");
   const [loading, setLoading] = useState(true);
@@ -106,7 +106,7 @@ function RikkesDetail() {
       nextExam = resolved.exam ?? nextExam;
     }
     setCand(nextCandidate);
-    setExam(nextExam);
+    setCurrentExam(nextExam);
     setGroups((resolved.sections ?? []).map((g: any) => ({
       id: g.id,
       group_key: g.section_key,
@@ -133,17 +133,17 @@ function RikkesDetail() {
   }, [id, load]);
 
   useEffect(() => {
-    if (!exam?.id) return;
-    syncNeurologiLabKeswaStatusLocal(exam.id);
+    if (!currentExam?.id) return;
+    syncNeurologiLabKeswaStatusLocal(currentExam.id);
     void load();
-  }, [exam?.id]);
+  }, [currentExam?.id]);
 
   function getGroup(key: string): Group | undefined {
     return groups.find((g) => g.group_key === key);
   }
 
   async function persistGroup(key: RikkesGroupKey, patch: Record<string, any>) {
-    if (!exam) return null;
+    if (!currentExam) return null;
     const { data: u } = await supabase.auth.getUser();
     const existing = getGroup(key);
     if (existing) {
@@ -159,7 +159,7 @@ function RikkesDetail() {
       const { data, error } = await supabase
         .from("rikkes_form_sections")
         .insert({
-          exam_id: exam.id,
+          exam_id: currentExam.id,
           candidate_id: id,
           group_key: key,
           created_by: u.user?.id,
@@ -178,10 +178,10 @@ function RikkesDetail() {
   async function saveDraft(key: RikkesGroupKey, data: any) {
     try {
       await persistGroup(key, { form_data_json: data, status: getGroup(key)?.status === "Submitted" ? "Submitted" : "Draft" });
-      await logAudit({ action: "save_draft_section", module: "rikkes", record_id: exam?.id, candidate_id: id, after: { group_key: key } });
-      if (exam) {
+      await logAudit({ action: "save_draft_section", module: "rikkes", record_id: currentExam?.id, candidate_id: id, after: { group_key: key } });
+      if (currentExam) {
         const nextStatus = getGroup(key)?.status === "Submitted" ? "Submitted" : "Draft";
-        await syncGroupToRekap({ examId: exam.id, candidateId: id, groupKey: key, status: nextStatus, payload: data });
+        await syncGroupToRekap({ examId: currentExam.id, candidateId: id, groupKey: key, status: nextStatus, payload: data });
       }
       toast.success("Draft tersimpan");
       await load();
@@ -189,12 +189,12 @@ function RikkesDetail() {
   }
 
   async function submit(key: RikkesGroupKey, data: any) {
-    if (!exam || !settings) return;
+    if (!currentExam || !settings) return;
     const gate = await evaluateGate({
-      examId: exam.id,
+      examId: currentExam.id,
       groupKey: key,
       settings,
-      bypassed: !!exam.bypass_initial_at,
+      bypassed: !!currentExam.bypass_initial_at,
     });
     if (!gate.allowed) {
       if (gate.canBypass) {
@@ -216,9 +216,9 @@ function RikkesDetail() {
         submitted_by: u.user?.id,
         submitted_at: new Date().toISOString(),
       } as any);
-      await logAudit({ action: "submit_form_section", module: "rikkes", record_id: exam?.id, candidate_id: id, after: { group_key: key } });
-      if (exam) {
-        await syncGroupToRekap({ examId: exam.id, candidateId: id, groupKey: key, status: "Submitted", payload: data });
+      await logAudit({ action: "submit_form_section", module: "rikkes", record_id: currentExam?.id, candidate_id: id, after: { group_key: key } });
+      if (currentExam) {
+        await syncGroupToRekap({ examId: currentExam.id, candidateId: id, groupKey: key, status: "Submitted", payload: data });
       }
       toast.success("Formulir disubmit");
       await load();
@@ -226,7 +226,7 @@ function RikkesDetail() {
   }
 
   async function confirmBypass(reason: string) {
-    if (!bypassPrompt || !exam) return;
+    if (!bypassPrompt || !currentExam) return;
     const { data: u } = await supabase.auth.getUser();
     const { error } = await supabase
       .from("exams")
@@ -235,12 +235,12 @@ function RikkesDetail() {
         bypass_initial_by: u.user?.id,
         bypass_initial_at: new Date().toISOString(),
       })
-      .eq("id", exam.id);
+      .eq("id", currentExam.id);
     if (error) { toast.error(error.message); return; }
     // Persist to dedicated audit table
     if (u.user?.id) {
       await supabase.from("bypass_audit").insert({
-        exam_id: exam.id,
+        exam_id: currentExam.id,
         candidate_id: id,
         section_key: bypassPrompt.key as string,
         bypass_type: "screening",
@@ -253,7 +253,7 @@ function RikkesDetail() {
     await logAudit({
       action: "bypass_hari_h_gating",
       module: "rikkes",
-      record_id: exam.id,
+      record_id: currentExam.id,
       candidate_id: id,
       after: { group_key: bypassPrompt.key, reason, reasons: bypassPrompt.reasons },
     });
@@ -271,7 +271,7 @@ function RikkesDetail() {
         returned_to_draft_at: new Date().toISOString(),
         return_reason: reason,
       } as any);
-      await logAudit({ action: "return_section_to_draft", module: "rikkes", record_id: exam?.id, candidate_id: id, after: { group_key: key, reason } });
+      await logAudit({ action: "return_section_to_draft", module: "rikkes", record_id: currentExam?.id, candidate_id: id, after: { group_key: key, reason } });
       toast.success("Dikembalikan ke Draft");
       await load();
     } catch (e: any) { toast.error(e.message); }
@@ -286,7 +286,7 @@ function RikkesDetail() {
   const activeGroup = getGroup(active);
   const activeStatusRaw = activeGroup?.status ?? "Draft";
   const activeMap: Record<string, string> = { neurologi_subtim: "neurologi", laboratorium: "laboratorium", psikologi_subtim: "jiwa_keswa" };
-  const activeStatus = exam?.id && activeMap[active] ? getDisplayStatusLocal(exam.id, activeMap[active], (getDb() as any)?.settings?.neuro_required ?? true) : activeStatusRaw;
+  const activeStatus = currentExam?.id && activeMap[active] ? getDisplayStatusLocal(currentExam.id, activeMap[active], (getDb() as any)?.settings?.neuro_required ?? true) : activeStatusRaw;
   const locked = activeStatus === "Locked";
   const submitted = activeStatus === "Submitted" || activeStatus === "Approved";
   const readOnly = viewerOnly || locked || (submitted && !canEdit);
@@ -310,13 +310,13 @@ function RikkesDetail() {
           <Button variant="outline" onClick={() => navigate({ to: "/dashboard" })}>
             <ArrowLeft className="h-4 w-4 mr-2" /> Kembali ke Dashboard
           </Button>
-          {exam?.id && (
-            <AttachmentsSheet examId={exam.id} candidateId={cand?.id} candidateName={cand?.full_name} />
+          {currentExam?.id && (
+            <AttachmentsSheet examId={currentExam.id} candidateId={cand?.id} candidateName={cand?.full_name} />
           )}
         </div>
       </div>
 
-      {exam?.id && <EkgRoBanner examId={exam.id} candidateId={cand?.id} />}
+      {currentExam?.id && <EkgRoBanner examId={currentExam.id} candidateId={cand?.id} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Panel Bagian Formulir */}
@@ -335,7 +335,7 @@ function RikkesDetail() {
                 const grp = getGroup(g.key);
                 const stRaw = grp?.status ?? "Draft";
                 const mapKey: Record<string, string> = { neurologi_subtim: "neurologi", laboratorium: "laboratorium", psikologi_subtim: "jiwa_keswa" };
-                const st = exam?.id && mapKey[g.key] ? getDisplayStatusLocal(exam.id, mapKey[g.key], (getDb() as any)?.settings?.neuro_required ?? true) : stRaw;
+                const st = currentExam?.id && mapKey[g.key] ? getDisplayStatusLocal(currentExam.id, mapKey[g.key], (getDb() as any)?.settings?.neuro_required ?? true) : stRaw;
                 const isActive = active === g.key;
                 const accent =
                   st === "Submitted" || st === "Approved" ? "border-l-emerald-500"
@@ -345,7 +345,7 @@ function RikkesDetail() {
                 return (
                   <button
                     key={g.key}
-                    onClick={() => { setActive(g.key); logAudit({ action: "open_form_section", module: "rikkes", record_id: exam?.id, candidate_id: id, after: { group_key: g.key } }); }}
+                    onClick={() => { setActive(g.key); logAudit({ action: "open_form_section", module: "rikkes", record_id: currentExam?.id, candidate_id: id, after: { group_key: g.key } }); }}
                     className={`w-full text-left rounded-md border-l-4 ${accent} px-3 py-2.5 text-sm font-medium flex items-center justify-between gap-2 transition ${
                       isActive ? "bg-primary text-primary-foreground shadow-sm" : "hover:bg-slate-50 text-slate-800"
                     }`}
@@ -364,11 +364,11 @@ function RikkesDetail() {
               )}
             </div>
             <div className="p-3 border-t border-slate-200 space-y-2">
-              <Button className="w-full bg-slate-700 hover:bg-slate-800 text-white" onClick={() => { if (exam?.id) { syncNeurologiLabKeswaStatusLocal(exam.id); } setPreviewOpen(true); logAudit({ action: "preview_pdf", module: "rikkes", record_id: exam?.id, candidate_id: id }); }}>
+              <Button className="w-full bg-slate-700 hover:bg-slate-800 text-white" onClick={() => { if (currentExam?.id) { syncNeurologiLabKeswaStatusLocal(currentExam.id); } setPreviewOpen(true); logAudit({ action: "preview_pdf", module: "rikkes", record_id: currentExam?.id, candidate_id: id }); }}>
                 <FileText className="h-4 w-4 mr-2" /> Preview & Finalisasi PDF
               </Button>
-              {(roles.includes("super_admin") || roles.includes("admin")) && exam?.id && (
-                <Button variant="outline" className="w-full" onClick={() => { if (exam?.id) { syncNeurologiLabKeswaStatusLocal(exam.id); } void load(); toast.success("Status Neurologi, Laboratorium, dan Keswa berhasil disinkronkan."); }}>Sinkronkan Status Formulir</Button>
+              {(roles.includes("super_admin") || roles.includes("admin")) && currentExam?.id && (
+                <Button variant="outline" className="w-full" onClick={() => { if (currentExam?.id) { syncNeurologiLabKeswaStatusLocal(currentExam.id); } void load(); toast.success("Status Neurologi, Laboratorium, dan Keswa berhasil disinkronkan."); }}>Sinkronkan Status Formulir</Button>
               )}
             </div>
           </div>
@@ -403,7 +403,7 @@ function RikkesDetail() {
               readOnly={readOnly}
               active={active}
               cand={cand}
-              examId={exam?.id}
+              examId={currentExam?.id}
               onSaveDraft={(d) => saveDraft(active, d)}
               onSubmit={(d) => submit(active, d)}
               canEditAfterSubmit={canEdit}
@@ -414,12 +414,12 @@ function RikkesDetail() {
                   await logAudit({
                     action: "revise_section_after_submit",
                     module: "rikkes",
-                    record_id: exam?.id,
+                    record_id: currentExam?.id,
                     candidate_id: id,
                     after: { group_key: active, reason },
                   });
-                  if (exam) {
-                    await syncGroupToRekap({ examId: exam.id, candidateId: id, groupKey: active, status: "Submitted", payload: d });
+                  if (currentExam) {
+                    await syncGroupToRekap({ examId: currentExam.id, candidateId: id, groupKey: active, status: "Submitted", payload: d });
                   }
                   toast.success("Revisi tersimpan, status tetap Submitted");
                   await load();
@@ -433,7 +433,7 @@ function RikkesDetail() {
         </section>
       </div>
 
-      <PreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} cand={cand} groups={groups} />
+      <PreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} cand={cand} groups={groups} currentExam={currentExam} />
 
       {bypassPrompt && (
         <BypassDialog
@@ -979,7 +979,7 @@ function ResumeForm({ data, set, readOnly }: any) {
 }
 
 /* -------------------- Preview Dialog -------------------- */
-function PreviewDialog({ open, onOpenChange, cand, groups }: { open: boolean; onOpenChange: (b: boolean) => void; cand: any; groups: Group[] }) {
+function PreviewDialog({ open, onOpenChange, cand, groups, currentExam }: { open: boolean; onOpenChange: (b: boolean) => void; cand: any; groups: Group[]; currentExam: any }) {
   const allSubmitted = RIKKES_GROUPS.every((g) => {
     const grp = groups.find((x) => x.group_key === g.key);
     return grp?.status === "Submitted" || grp?.status === "Approved" || grp?.status === "Locked";
@@ -998,7 +998,7 @@ function PreviewDialog({ open, onOpenChange, cand, groups }: { open: boolean; on
               const grp = groups.find((x) => x.group_key === g.key);
               const stRaw = grp?.status ?? "Draft";
                 const mapKey: Record<string, string> = { neurologi_subtim: "neurologi", laboratorium: "laboratorium", psikologi_subtim: "jiwa_keswa" };
-                const st = exam?.id && mapKey[g.key] ? getDisplayStatusLocal(exam.id, mapKey[g.key], (getDb() as any)?.settings?.neuro_required ?? true) : stRaw;
+                const st = currentExam?.id && mapKey[g.key] ? getDisplayStatusLocal(currentExam.id, mapKey[g.key], (getDb() as any)?.settings?.neuro_required ?? true) : stRaw;
               const ok = st === "Submitted" || st === "Approved" || st === "Locked";
               return (
                 <div key={g.key} className="flex items-center justify-between text-sm py-1.5 border-b border-slate-100">
