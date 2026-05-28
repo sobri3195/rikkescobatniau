@@ -163,7 +163,7 @@ export function updateCandidateLocal(id: string, patch: any) {
       id: generateId("audit"),
       user_id: session?.user_id ?? "local_user",
       role: session?.role ?? "unknown",
-      action: "update_candidate_local",
+      action: normalizedTestNumber && before.test_number !== normalizedTestNumber ? "update_test_number" : "update_candidate",
       module: "Candidates",
       candidate_id: id,
       before_data_json: before,

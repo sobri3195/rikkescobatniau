@@ -1,5 +1,6 @@
 import { generateId, getDb, isSectionCompleted, nowIso, saveDb } from "@/lib/localDb";
 import { createDefaultExamSectionsLocal } from "@/lib/services/examSectionService";
+import { recalculateExamProgressLocal, refreshAllDerivedDataLocal, syncExamRelationsLocal } from "@/lib/services/syncService";
 
 function defaultExam(candidate: any) {
   const now = nowIso();

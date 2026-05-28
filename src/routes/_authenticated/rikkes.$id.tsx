@@ -50,20 +50,9 @@ import { AttachmentsSheet } from "@/components/hari-h/AttachmentsSheet";
 import { BypassDialog } from "@/components/hari-h/BypassDialog";
 import { evaluateGate, loadHariHSettings, type HariHSettings } from "@/lib/hari-h-gating";
 import { syncGroupToRekap } from "@/lib/rekap-sync";
-import {
-  generateId,
-  getDb,
-  getDisplayStatusLocal,
-  getLocalSession,
-  normalizeSectionStatus,
-  isSectionCompleted,
-  nowIso,
-  saveDb,
-  syncNeurologiLabKeswaStatusLocal,
-  resolveRikkesDetailLocal,
-  logAuditLocal,
-} from "@/lib/localDb";
-import { ensureExamForCandidateLocal, updateExamLocal } from "@/lib/services/examService";
+import { getDb, getDisplayStatusLocal, normalizeSectionStatus, isSectionCompleted, syncNeurologiLabKeswaStatusLocal, resolveRikkesDetailLocal, logAuditLocal } from "@/lib/localDb";
+import { ensureExamForCandidateLocal } from "@/lib/services/examService";
+import { refreshAllDerivedDataLocal, subscribeLocalDbChanged, syncExamRelationsLocal } from "@/lib/services/syncService";
 import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
 import { persistExamSectionLocal } from "@/lib/services/examSectionService";
 
@@ -212,6 +201,8 @@ function RikkesDetail() {
     logAudit({ action: "open_detail_exam", module: "rikkes", record_id: id, candidate_id: id });
   }, [id, load]);
 
+  useEffect(() => subscribeLocalDbChanged(() => { void load(); }), [load]);
+
   useEffect(() => {
     if (!currentExam?.id) return;
     syncNeurologiLabKeswaStatusLocal(currentExam.id);
@@ -249,13 +240,8 @@ function RikkesDetail() {
       });
       if (currentExam) {
         const nextStatus = getGroup(key)?.status === "Submitted" ? "Submitted" : "Draft";
-        await syncGroupToRekap({
-          examId: currentExam.id,
-          candidateId: id,
-          groupKey: key,
-          status: nextStatus,
-          payload: data,
-        });
+        await syncGroupToRekap({ examId: currentExam.id, candidateId: id, groupKey: key, status: nextStatus, payload: data });
+        syncExamRelationsLocal(currentExam.id); refreshAllDerivedDataLocal();
       }
       toast.success("Draft tersimpan");
       await load();
@@ -300,13 +286,8 @@ function RikkesDetail() {
         after: { group_key: key },
       });
       if (currentExam) {
-        await syncGroupToRekap({
-          examId: currentExam.id,
-          candidateId: id,
-          groupKey: key,
-          status: "Submitted",
-          payload: data,
-        });
+        await syncGroupToRekap({ examId: currentExam.id, candidateId: id, groupKey: key, status: "Submitted", payload: data });
+        syncExamRelationsLocal(currentExam.id); refreshAllDerivedDataLocal();
       }
       toast.success("Formulir disubmit");
       await load();
@@ -563,53 +544,43 @@ function RikkesDetail() {
               </p>
             </div>
           ) : (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-              <FormHeader
-                groupLabel={RIKKES_GROUPS.find((g) => g.key === active)?.label ?? ""}
-                status={activeStatus}
-                canReturn={canReturn}
-                onReturn={(reason) => returnToDraft(active, reason)}
-                renderActions={(formData) => (
-                  <FormActions
-                    status={activeStatus}
-                    canEdit={canEdit}
-                    onSaveDraft={() => saveDraft(active, formData)}
-                    onSubmit={() => submit(active, formData)}
-                  />
-                )}
-                data={activeGroup?.form_data_json ?? {}}
-                readOnly={readOnly}
-                active={active}
-                cand={cand}
-                examId={currentExam?.id}
-                selectionLabel={selectionLabel}
-                onSaveDraft={(d) => saveDraft(active, d)}
-                onSubmit={(d) => submit(active, d)}
-                canEditAfterSubmit={canEdit}
-                onPersisted={load}
-                onSaveRevision={async (d, reason) => {
-                  try {
-                    await persistGroup(active, { form_data_json: d, status: "Submitted" });
-                    await logAudit({
-                      action: "revise_section_after_submit",
-                      module: "rikkes",
-                      record_id: currentExam?.id,
-                      candidate_id: id,
-                      after: { group_key: active, reason },
-                    });
-                    if (currentExam) {
-                      await syncGroupToRekap({
-                        examId: currentExam.id,
-                        candidateId: id,
-                        groupKey: active,
-                        status: "Submitted",
-                        payload: d,
-                      });
-                    }
-                    toast.success("Revisi tersimpan, status tetap Submitted");
-                    await load();
-                  } catch (e: any) {
-                    toast.error(e.message);
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+            <FormHeader
+              groupLabel={RIKKES_GROUPS.find((g) => g.key === active)?.label ?? ""}
+              status={activeStatus}
+              canReturn={canReturn}
+              onReturn={(reason) => returnToDraft(active, reason)}
+              renderActions={(formData) => (
+                <FormActions
+                  status={activeStatus}
+                  canEdit={canEdit}
+                  onSaveDraft={() => saveDraft(active, formData)}
+                  onSubmit={() => submit(active, formData)}
+                />
+              )}
+              data={activeGroup?.form_data_json ?? {}}
+              readOnly={readOnly}
+              active={active}
+              cand={cand}
+              examId={currentExam?.id}
+              selectionLabel={selectionLabel}
+              onSaveDraft={(d) => saveDraft(active, d)}
+              onSubmit={(d) => submit(active, d)}
+              canEditAfterSubmit={canEdit}
+              onPersisted={load}
+              onSaveRevision={async (d, reason) => {
+                try {
+                  await persistGroup(active, { form_data_json: d, status: "Submitted" });
+                  await logAudit({
+                    action: "revise_section_after_submit",
+                    module: "rikkes",
+                    record_id: currentExam?.id,
+                    candidate_id: id,
+                    after: { group_key: active, reason },
+                  });
+                  if (currentExam) {
+                    await syncGroupToRekap({ examId: currentExam.id, candidateId: id, groupKey: active, status: "Submitted", payload: d });
+                    syncExamRelationsLocal(currentExam.id); refreshAllDerivedDataLocal();
                   }
                 }}
               />
@@ -929,105 +900,21 @@ function ActiveForm({
 }) {
   const set = (patch: any) => onChange({ ...data, ...patch });
   switch (active) {
-    case "identitas_anamnesis":
-      return (
-        <IdentitasAnamnesisForm
-          cand={cand}
-          exam={{ id: examId }}
-          selectionLabel={selectionLabel}
-          onSyncSection={async (status, submittedAt) => {
-            if (examId)
-              persistExamSectionLocal(
-                examId,
-                "identitas_anamnesis",
-                ((getDb() as any).medical_history_forms ?? []).find(
-                  (item: any) => item.exam_id === examId,
-                ) ?? {},
-                status === "Submitted" ? "Submitted" : "Draft",
-                { submitted_at: submittedAt },
-              );
-            onPersisted?.();
-          }}
-        />
-      );
-    case "screening_hari_h":
-      return <ScreeningHariHForm cand={cand} examId={examId} />;
-    case "lembar_evaluasi_umum":
-      return <PemeriksaanUmumForm cand={cand} examId={examId} />;
-    case "evaluasi_klinis":
-      return <ClinicalForm data={data} set={set} readOnly={readOnly} />;
-    case "gigi_odontogram":
-      return examId ? (
-        <DentalOdontogramForm
-          examId={examId}
-          candidateId={cand.id}
-          readOnly={readOnly}
-          canEditAfterSubmit={canEditAfterSubmit}
-          onPersisted={onPersisted}
-        />
-      ) : null;
-    case "penunjang":
-      return <PenunjangForm data={data} set={set} readOnly={readOnly} />;
-    case "ukuran_lain":
-      return <UkuranForm data={data} set={set} readOnly={readOnly} examId={examId} />;
-    case "mata_tht":
-      return <MataThtForm data={data} set={set} readOnly={readOnly} />;
-    case "tht_subtim":
-      return examId ? (
-        <ThtForm
-          examId={examId}
-          candidateId={cand.id}
-          readOnly={readOnly}
-          canEditAfterSubmit={canEditAfterSubmit}
-        />
-      ) : null;
-    case "mata_visus_subtim":
-      return examId ? (
-        <EyeVisionForm
-          examId={examId}
-          candidateId={cand.id}
-          readOnly={readOnly}
-          canEditAfterSubmit={canEditAfterSubmit}
-        />
-      ) : null;
-    case "bedah_subtim":
-      return examId ? (
-        <SurgeryForm
-          examId={examId}
-          candidateId={cand.id}
-          readOnly={readOnly}
-          canEditAfterSubmit={canEditAfterSubmit}
-        />
-      ) : null;
-    case "neurologi_subtim":
-      return examId ? (
-        <NeurologyForm
-          examId={examId}
-          candidateId={cand.id}
-          readOnly={readOnly}
-          canEditAfterSubmit={canEditAfterSubmit}
-        />
-      ) : null;
-    case "laboratorium":
-      return examId ? (
-        <LabSubteamForm
-          examId={examId}
-          candidateId={cand.id}
-          readOnly={readOnly}
-          canEditAfterSubmit={canEditAfterSubmit}
-        />
-      ) : null;
-    case "psikologi_subtim":
-      return examId ? (
-        <PsychologyForm
-          examId={examId}
-          candidateId={cand.id}
-          readOnly={readOnly}
-          canEditAfterSubmit={canEditAfterSubmit}
-        />
-      ) : null;
-    case "resume_rekomendasi":
-      return <ResumeForm data={data} set={set} readOnly={readOnly} />;
+    case "identitas_anamnesis": return <IdentitasAnamnesisForm cand={cand} exam={{ id: examId }} selectionLabel={selectionLabel} onSyncSection={async () => { if (examId) { syncExamRelationsLocal(examId); refreshAllDerivedDataLocal(); } }} />;
+    case "screening_hari_h": return <ScreeningHariHForm cand={cand} examId={examId} />;
+    case "lembar_evaluasi_umum": return <PemeriksaanUmumForm cand={cand} examId={examId} />;
+    case "evaluasi_klinis": return <ClinicalForm data={data} set={set} readOnly={readOnly} />;
+    case "gigi_odontogram": return examId ? <DentalOdontogramForm examId={examId} candidateId={cand.id} readOnly={readOnly} canEditAfterSubmit={canEditAfterSubmit} onPersisted={onPersisted} /> : null;
+    case "penunjang": return <PenunjangForm data={data} set={set} readOnly={readOnly} />;
+    case "ukuran_lain": return <UkuranForm data={data} set={set} readOnly={readOnly} examId={examId} />;
+    case "mata_tht": return <MataThtForm data={data} set={set} readOnly={readOnly} />;
+    case "tht_subtim": return examId ? <ThtForm examId={examId} candidateId={cand.id} readOnly={readOnly} canEditAfterSubmit={canEditAfterSubmit} /> : null;
+    case "mata_visus_subtim": return examId ? <EyeVisionForm examId={examId} candidateId={cand.id} readOnly={readOnly} canEditAfterSubmit={canEditAfterSubmit} /> : null;
+    case "bedah_subtim": return examId ? <SurgeryForm examId={examId} candidateId={cand.id} readOnly={readOnly} canEditAfterSubmit={canEditAfterSubmit} /> : null;
+    case "neurologi_subtim": return examId ? <NeurologyForm examId={examId} candidateId={cand.id} readOnly={readOnly} canEditAfterSubmit={canEditAfterSubmit} /> : null;
+    case "laboratorium": return examId ? <LabSubteamForm examId={examId} candidateId={cand.id} readOnly={readOnly} canEditAfterSubmit={canEditAfterSubmit} /> : null;
+    case "psikologi_subtim": return examId ? <PsychologyForm examId={examId} candidateId={cand.id} readOnly={readOnly} canEditAfterSubmit={canEditAfterSubmit} /> : null;
+    case "resume_rekomendasi": return <ResumeForm data={data} set={set} readOnly={readOnly} />;
   }
 }
 

@@ -34,6 +34,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { STAGE_BADGE, INIT_STATUS_BADGE, type HariHStage } from "@/lib/hari-h-stage";
 import { listCandidatesWithoutTestNumberLocal } from "@/lib/services/candidateService";
 import { listSelectionsLocal } from "@/lib/localDb";
+import { subscribeLocalDbChanged } from "@/lib/services/syncService";
 
 export const Route = createFileRoute("/_authenticated/peserta-tanpa-no-test")({
   component: PesertaTanpaNoTestPage,
@@ -129,7 +130,7 @@ function PesertaTanpaNoTestPage() {
     setLoading(false);
   }, [showDeleted]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); return subscribeLocalDbChanged(() => { void load(); }); }, [load]);
   useEffect(() => {
     const data = listSelectionsLocal() as any[];
     setSelections(data.map((s) => ({ id: s.id, name: s.selection_name ?? s.name ?? "-" })));

@@ -194,7 +194,7 @@ function AppShellInner() {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("rikkes:sidebar:collapsed") === "1";
   });
-  const [noTestPending, setNoTestPending] = useState<number>(0);
+  const [badges, setBadges] = useState({ noTestPending: 0, incomplete: 0, review: 0, importIssues: 0 });
 
   useEffect(() => {
     if (isPatientOnly) return undefined;

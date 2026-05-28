@@ -255,7 +255,9 @@ export function updateSectionLocal(examId: string, sectionKey: string, patch: an
 }
 
 export function submitSectionLocal(examId: string, sectionKey: string, formData: any) {
-  return persistExamSectionLocal(examId, sectionKey, formData, "Submitted");
+  const row = updateSectionLocal(examId, sectionKey, { section_status: "Submitted", form_data_json: formData, submitted_at: nowIso() });
+  addAuditLogLocal("submit_section", { exam_id: examId, section_key: sectionKey });
+  return row;
 }
 
 export function returnSectionToDraftLocal(examId: string, sectionKey: string) {
@@ -264,7 +266,7 @@ export function returnSectionToDraftLocal(examId: string, sectionKey: string) {
     submitted_at: null,
     submitted_by: null,
   });
-  addAuditLogLocal("return_section_to_draft_local", { exam_id: examId, section_key: sectionKey });
+  addAuditLogLocal("save_draft_section", { exam_id: examId, section_key: sectionKey });
   return row;
 }
 

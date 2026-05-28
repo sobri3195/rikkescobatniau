@@ -20,6 +20,7 @@ import { useAuth } from "@/lib/use-auth";
 import { backfillRekapSync } from "@/lib/rekap-backfill";
 import { downloadCandidateResumeById } from "@/lib/candidate-resume-fetch";
 import { PROGRESS_STATUS_LABEL, PROGRESS_STATUS_CLASS, type ProgressItemStatus } from "@/lib/candidate-progress";
+import { subscribeLocalDbChanged } from "@/lib/services/syncService";
 
 export const Route = createFileRoute("/_authenticated/rekap-aplikasi")({
   component: RekapAplikasiPage,
@@ -336,7 +337,7 @@ function RekapAplikasiPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); return subscribeLocalDbChanged(() => { void load(); }); }, [load]);
   const [lastRefreshAt, setLastRefreshAt] = useState<Date>(() => new Date());
   const { roles } = useAuth();
   const isAdmin = roles.includes("super_admin") || roles.includes("admin") || roles.includes("tester");

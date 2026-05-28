@@ -14,6 +14,7 @@ import { SelectionCard, type SelectionCardData } from "@/components/selection/Se
 import { toast } from "sonner";
 import { logAudit } from "@/lib/audit";
 import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
+import { buildDashboardSummaryLocal, rebuildRekapCacheLocal, subscribeLocalDbChanged, syncAllLocalRelations } from "@/lib/services/syncService";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: DashboardPage,
@@ -74,6 +75,14 @@ function Dashboard() {
   }
 
   useEffect(() => { void load(); }, []);
+  useEffect(() => subscribeLocalDbChanged(() => { void load(); }), []);
+
+  function repairAndSync() {
+    try {
+      syncAllLocalRelations({ auditAction: "repair_sync", module: "Dashboard" }); rebuildRekapCacheLocal(); buildDashboardSummaryLocal(); void load(true);
+      toast.success("Repair & Sync Local Data selesai");
+    } catch (e: any) { toast.error(e?.message ?? "Repair & Sync gagal"); }
+  }
 
   const years = useMemo(
     () => Array.from(new Set(selections.map((s) => s.year_label).filter(Boolean))).sort(),
@@ -123,6 +132,11 @@ function Dashboard() {
               <Link to="/selections">
                 <ClipboardList className="h-4 w-4 mr-2" /> Master Seleksi
               </Link>
+            </Button>
+          )}
+          {roles.includes("super_admin") && (
+            <Button variant="outline" size="sm" onClick={repairAndSync} disabled={loading}>
+              <RefreshCw className="h-4 w-4 mr-2" /> Repair & Sync Local Data
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={() => void load(true)} disabled={loading}>

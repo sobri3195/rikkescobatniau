@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { localDataApi } from "@/lib/localDataApi";
 import { logAudit } from "@/lib/audit";
+import { refreshAllDerivedDataLocal, syncAllLocalRelations } from "@/lib/services/syncService";
 
 export type BulkRow = {
   rowNumber: number;
@@ -302,7 +303,8 @@ export async function applyBulkUpdate(rows: BulkRow[]): Promise<{ applied: numbe
       .from("candidates")
       .update({
         test_number: r.no_test_baru,
-        test_number_status: "Final",
+        test_number_status: "assigned",
+        no_test_missing: false,
         test_number_assigned_at: now,
         test_number_assigned_by: u.user?.id ?? null,
         test_number_notes: r.catatan || null,
@@ -323,5 +325,7 @@ export async function applyBulkUpdate(rows: BulkRow[]): Promise<{ applied: numbe
     applied++;
   }
 
+  syncAllLocalRelations({ auditAction: "update_test_number", module: "Bulk Update Nomor Tes" });
+  refreshAllDerivedDataLocal();
   return { applied, failed: errors.length, errors };
 }
