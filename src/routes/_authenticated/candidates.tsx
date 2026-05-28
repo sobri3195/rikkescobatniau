@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { TableExportMenu } from "@/components/export/TableExportMenu";
 import { useAuth } from "@/lib/use-auth";
 import { DeletePersonnelDialog } from "@/components/app/DeletePersonnelDialog";
 import { createCandidateLocal, findDuplicateTestNumberLocal, listCandidatesLocal } from "@/lib/services/candidateService";
+import { ensureExamForCandidateLocal, getExamByCandidateIdLocal } from "@/lib/services/examService";
 import { listSelections, createSelection } from "@/lib/selectionService";
 import { getDb, saveDb } from "@/lib/localDb";
 
@@ -39,6 +40,7 @@ function CandidatesPage() {
   const [open, setOpen] = useState(false);
   const [delTarget, setDelTarget] = useState<Cand | null>(null);
   const { hasAnyRole } = useAuth();
+  const navigate = useNavigate();
   const canDelete = hasAnyRole(["super_admin", "tester"]);
 
   async function load() {
@@ -124,9 +126,28 @@ function CandidatesPage() {
                   <td className="p-3">{c.panda ?? "-"}</td>
                   <td className="p-3 text-right">
                     <div className="flex items-center justify-end gap-3">
-                      <Link to="/rikkes/$id" params={{ id: c.id }} className="text-accent hover:underline text-sm">
+                      <Button
+                        variant="link"
+                        className="text-accent hover:underline text-sm px-0 h-auto"
+                        onClick={() => {
+                          try {
+                            const exam = getExamByCandidateIdLocal(c.id) ?? ensureExamForCandidateLocal(c.id);
+                            if (!exam?.id) {
+                              toast.error("Data pemeriksaan peserta belum tersedia.");
+                              return;
+                            }
+                            navigate({
+                              to: "/rikkes/$id",
+                              params: { id: exam.id },
+                              search: { candidateId: c.id, selectionId: c.selection_id, from: "peserta" } as any,
+                            });
+                          } catch (error: any) {
+                            toast.error(error?.message ?? "Gagal membuka detail peserta.");
+                          }
+                        }}
+                      >
                         Detail →
-                      </Link>
+                      </Button>
                       {canDelete && (
                         <Button
                           variant="destructive"
