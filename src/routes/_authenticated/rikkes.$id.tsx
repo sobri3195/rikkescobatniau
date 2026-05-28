@@ -22,6 +22,7 @@ import { evaluateGate, loadHariHSettings, type HariHSettings } from "@/lib/hari-
 import { syncGroupToRekap } from "@/lib/rekap-sync";
 import { getDb, getDisplayStatusLocal, normalizeSectionStatus, isSectionCompleted, syncNeurologiLabKeswaStatusLocal, resolveRikkesDetailLocal, logAuditLocal } from "@/lib/localDb";
 import { ensureExamForCandidateLocal } from "@/lib/services/examService";
+import { refreshAllDerivedDataLocal, subscribeLocalDbChanged, syncExamRelationsLocal } from "@/lib/services/syncService";
 import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
 
 // Lazy-load heavy form components so initial detail render only ships the active section.
@@ -132,6 +133,8 @@ function RikkesDetail() {
     logAudit({ action: "open_detail_exam", module: "rikkes", record_id: id, candidate_id: id });
   }, [id, load]);
 
+  useEffect(() => subscribeLocalDbChanged(() => { void load(); }), [load]);
+
   useEffect(() => {
     if (!currentExam?.id) return;
     syncNeurologiLabKeswaStatusLocal(currentExam.id);
@@ -182,6 +185,7 @@ function RikkesDetail() {
       if (currentExam) {
         const nextStatus = getGroup(key)?.status === "Submitted" ? "Submitted" : "Draft";
         await syncGroupToRekap({ examId: currentExam.id, candidateId: id, groupKey: key, status: nextStatus, payload: data });
+        syncExamRelationsLocal(currentExam.id); refreshAllDerivedDataLocal();
       }
       toast.success("Draft tersimpan");
       await load();
@@ -219,6 +223,7 @@ function RikkesDetail() {
       await logAudit({ action: "submit_form_section", module: "rikkes", record_id: currentExam?.id, candidate_id: id, after: { group_key: key } });
       if (currentExam) {
         await syncGroupToRekap({ examId: currentExam.id, candidateId: id, groupKey: key, status: "Submitted", payload: data });
+        syncExamRelationsLocal(currentExam.id); refreshAllDerivedDataLocal();
       }
       toast.success("Formulir disubmit");
       await load();
@@ -429,6 +434,7 @@ function RikkesDetail() {
                   });
                   if (currentExam) {
                     await syncGroupToRekap({ examId: currentExam.id, candidateId: id, groupKey: active, status: "Submitted", payload: d });
+                    syncExamRelationsLocal(currentExam.id); refreshAllDerivedDataLocal();
                   }
                   toast.success("Revisi tersimpan, status tetap Submitted");
                   await load();
@@ -644,7 +650,7 @@ function RikkesDetailSkeleton() {
 function ActiveForm({ active, cand, examId, selectionLabel, data, onChange, readOnly, canEditAfterSubmit, onPersisted }: { active: RikkesGroupKey; cand: any; examId?: string; selectionLabel?: string; data: any; onChange: (d: any) => void; readOnly: boolean; canEditAfterSubmit?: boolean; onPersisted?: () => void }) {
   const set = (patch: any) => onChange({ ...data, ...patch });
   switch (active) {
-    case "identitas_anamnesis": return <IdentitasAnamnesisForm cand={cand} exam={{ id: examId }} selectionLabel={selectionLabel} />;
+    case "identitas_anamnesis": return <IdentitasAnamnesisForm cand={cand} exam={{ id: examId }} selectionLabel={selectionLabel} onSyncSection={async () => { if (examId) { syncExamRelationsLocal(examId); refreshAllDerivedDataLocal(); } }} />;
     case "screening_hari_h": return <ScreeningHariHForm cand={cand} examId={examId} />;
     case "lembar_evaluasi_umum": return <PemeriksaanUmumForm cand={cand} examId={examId} />;
     case "evaluasi_klinis": return <ClinicalForm data={data} set={set} readOnly={readOnly} />;

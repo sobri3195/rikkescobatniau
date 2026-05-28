@@ -1,6 +1,7 @@
 import { generateId, getDb, nowIso, saveDb } from "@/lib/localDb";
 import { addAuditLogLocal } from "@/lib/services/auditService";
 import { recalcExamProgressLocal } from "@/lib/services/examService";
+import { recalculateHariHStageLocal, refreshAllDerivedDataLocal, syncExamRelationsLocal } from "@/lib/services/syncService";
 
 const DEFAULT_SECTIONS = [
   ["identitas_anamnesis", "Identitas & Anamnesis"],
@@ -31,6 +32,8 @@ export function createDefaultExamSectionsLocal(examId: string, candidateId: stri
     });
   }
   saveDb(db);
+  syncExamRelationsLocal(examId);
+  refreshAllDerivedDataLocal();
 }
 
 export function updateSectionLocal(examId: string, sectionKey: string, patch: any) {
@@ -40,12 +43,16 @@ export function updateSectionLocal(examId: string, sectionKey: string, patch: an
   Object.assign(row, patch, { updated_at: nowIso() });
   saveDb(db);
   recalcExamProgressLocal(examId);
+  recalculateHariHStageLocal(examId);
+  syncExamRelationsLocal(examId);
+  refreshAllDerivedDataLocal();
+  addAuditLogLocal(patch?.section_status === "Submitted" ? "submit_section" : "save_draft_section", { exam_id: examId, section_key: sectionKey });
   return row;
 }
 
 export function submitSectionLocal(examId: string, sectionKey: string, formData: any) {
   const row = updateSectionLocal(examId, sectionKey, { section_status: "Submitted", form_data_json: formData, submitted_at: nowIso() });
-  addAuditLogLocal("submit_section_local", { exam_id: examId, section_key: sectionKey });
+  addAuditLogLocal("submit_section", { exam_id: examId, section_key: sectionKey });
   return row;
 }
 
@@ -55,7 +62,7 @@ export function returnSectionToDraftLocal(examId: string, sectionKey: string) {
     submitted_at: null,
     submitted_by: null,
   });
-  addAuditLogLocal("return_section_to_draft_local", { exam_id: examId, section_key: sectionKey });
+  addAuditLogLocal("save_draft_section", { exam_id: examId, section_key: sectionKey });
   return row;
 }
 

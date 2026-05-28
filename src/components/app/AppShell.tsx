@@ -8,6 +8,7 @@ import { RealtimeNotifier } from "@/components/app/RealtimeNotifier";
 import { NotificationsBell } from "@/components/app/NotificationsBell";
 import { usePermissions } from "@/lib/permissions/use-permissions";
 import { getDb } from "@/lib/localDb";
+import { subscribeLocalDbChanged } from "@/lib/services/syncService";
 import { PERMISSIONS } from "@/lib/permissions/keys";
 import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
 
@@ -98,13 +99,21 @@ function AppShellInner() {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("rikkes:sidebar:collapsed") === "1";
   });
-  const [noTestPending, setNoTestPending] = useState<number>(0);
+  const [badges, setBadges] = useState({ noTestPending: 0, incomplete: 0, review: 0, importIssues: 0 });
 
-  useEffect(() => {
+  function refreshBadges() {
     if (isPatientOnly) return;
     const db = getDb() as any;
-    const count = (db.candidates ?? []).filter((c: any) => !c.test_number || String(c.test_number).startsWith("TMP-")).length;
-    setNoTestPending(count);
+    const noTestPending = (db.candidates ?? []).filter((c: any) => !c.is_deleted && (!String(c.test_number ?? "").trim() || c.test_number_status === "pending" || c.no_test_missing === true)).length;
+    const incomplete = (db.incomplete_data_rows ?? []).length;
+    const review = (db.exams ?? []).filter((e: any) => !e.is_deleted && String(e.hari_h_stage ?? e.exam_status ?? "").toLowerCase().includes("review")).length;
+    const importIssues = (db.test_number_import_rows ?? []).filter((r: any) => r.status === "error" || r.error || r.issue).length + (db.bulk_import_sessions ?? []).filter((r: any) => r.status === "error" || r.error_count > 0).length;
+    setBadges({ noTestPending, incomplete, review, importIssues });
+  }
+
+  useEffect(() => {
+    refreshBadges();
+    return subscribeLocalDbChanged(refreshBadges);
   }, [isPatientOnly, path]);
 
   useEffect(() => {
@@ -154,12 +163,27 @@ function AppShellInner() {
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 {!collapsed && <span className="truncate flex-1">{n.label}</span>}
-                {n.to === "/peserta-tanpa-no-test" && noTestPending > 0 && (
+                {n.to === "/peserta-tanpa-no-test" && badges.noTestPending > 0 && (
                   <span
                     className={`${collapsed ? "absolute top-1 right-1" : "ml-auto"} inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold bg-amber-400 text-amber-950 leading-none`}
-                    title={`${noTestPending} peserta belum punya No Test final`}
+                    title={`${badges.noTestPending} peserta belum punya No Test final`}
                   >
-                    {noTestPending > 99 ? "99+" : noTestPending}
+                    {badges.noTestPending > 99 ? "99+" : badges.noTestPending}
+                  </span>
+                )}
+                {n.to === "/data-belum-lengkap" && badges.incomplete > 0 && (
+                  <span className={`${collapsed ? "absolute top-1 right-1" : "ml-auto"} inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold bg-red-400 text-red-950 leading-none`}>
+                    {badges.incomplete > 99 ? "99+" : badges.incomplete}
+                  </span>
+                )}
+                {n.to === "/bypass-review" && badges.review > 0 && (
+                  <span className={`${collapsed ? "absolute top-1 right-1" : "ml-auto"} inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold bg-sky-300 text-sky-950 leading-none`}>
+                    {badges.review > 99 ? "99+" : badges.review}
+                  </span>
+                )}
+                {n.to === "/import-history" && badges.importIssues > 0 && (
+                  <span className={`${collapsed ? "absolute top-1 right-1" : "ml-auto"} inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold bg-orange-300 text-orange-950 leading-none`}>
+                    {badges.importIssues > 99 ? "99+" : badges.importIssues}
                   </span>
                 )}
               </Link>

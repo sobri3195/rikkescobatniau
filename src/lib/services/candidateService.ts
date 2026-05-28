@@ -2,6 +2,7 @@ import { generateId, getDb, getLocalSession, nowIso, saveDb } from "@/lib/localD
 import { addAuditLogLocal } from "@/lib/services/auditService";
 import { createExamForCandidateLocal, ensureExamForCandidateLocal } from "@/lib/services/examService";
 import { buildParticipantRowLocal } from "@/lib/services/participantRowService";
+import { refreshAllDerivedDataLocal, syncCandidateRelationsLocal } from "@/lib/services/syncService";
 
 function generateTemporaryId(db: any) {
   const d = new Date();
@@ -27,7 +28,7 @@ export function listCandidatesWithoutTestNumberLocal(filters: any = {}) {
   return rows;
 }
 
-export function createCandidateLocal(input: any) { const db = getDb() as any; if (!input.selection_id) throw new Error("selection_id wajib"); const now = nowIso(); const tn = String(input.test_number ?? "").trim(); if (tn) { const dup = findDuplicateTestNumberLocal({ selectionId: input.selection_id, testNumber: tn }); if (dup) throw new Error(`Nomor test sudah dipakai oleh ${dup.full_name ?? "peserta lain"}.`); } const candidate = { id: generateId("cand"), selection_id: input.selection_id, full_name: input.full_name, gender: input.gender ?? "L", rank: input.rank ?? "", nrp_nip: input.nrp_nip ?? "", unit_position: input.unit_position ?? input.unit ?? "", pok_korp: input.pok_korp ?? "", panda: input.panda ?? "", group_name: input.group_name ?? input.kelompok ?? "", birth_place: input.birth_place ?? "", birth_date: input.birth_date ?? "", phone: input.phone ?? "", address: input.address ?? "", test_number: tn, temporary_id: tn ? "" : generateTemporaryId(db), test_number_status: tn ? "assigned" : "pending", no_test_missing: !tn, registration_notes: input.registration_notes ?? "", is_deleted: false, created_at: now, updated_at: now }; db.candidates = db.candidates ?? []; db.candidates.push(candidate); saveDb(db); createExamForCandidateLocal(candidate); addAuditLogLocal("create_candidate_local", { candidate_id: candidate.id, selection_id: candidate.selection_id }); return candidate; }
+export function createCandidateLocal(input: any) { const db = getDb() as any; if (!input.selection_id) throw new Error("selection_id wajib"); const now = nowIso(); const tn = String(input.test_number ?? "").trim(); if (tn) { const dup = findDuplicateTestNumberLocal({ selectionId: input.selection_id, testNumber: tn }); if (dup) throw new Error(`Nomor test sudah dipakai oleh ${dup.full_name ?? "peserta lain"}.`); } const candidate = { id: generateId("cand"), selection_id: input.selection_id, full_name: input.full_name, gender: input.gender ?? "L", rank: input.rank ?? "", nrp_nip: input.nrp_nip ?? "", unit_position: input.unit_position ?? input.unit ?? "", pok_korp: input.pok_korp ?? "", panda: input.panda ?? "", group_name: input.group_name ?? input.kelompok ?? "", birth_place: input.birth_place ?? "", birth_date: input.birth_date ?? "", phone: input.phone ?? "", address: input.address ?? "", test_number: tn, temporary_id: tn ? "" : generateTemporaryId(db), test_number_status: tn ? "assigned" : "pending", no_test_missing: !tn, registration_notes: input.registration_notes ?? "", is_deleted: false, created_at: now, updated_at: now }; db.candidates = db.candidates ?? []; db.candidates.push(candidate); saveDb(db); createExamForCandidateLocal(candidate); addAuditLogLocal("create_candidate", { candidate_id: candidate.id, selection_id: candidate.selection_id }); syncCandidateRelationsLocal(candidate.id); refreshAllDerivedDataLocal(); return candidate; }
 export function updateCandidateLocal(id: string, patch: any) {
   const db = getDb() as any;
   const now = nowIso();
@@ -72,7 +73,7 @@ export function updateCandidateLocal(id: string, patch: any) {
       id: generateId("audit"),
       user_id: session?.user_id ?? "local_user",
       role: session?.role ?? "unknown",
-      action: "update_candidate_local",
+      action: normalizedTestNumber && before.test_number !== normalizedTestNumber ? "update_test_number" : "update_candidate",
       module: "Candidates",
       candidate_id: id,
       before_data_json: before,
@@ -82,6 +83,8 @@ export function updateCandidateLocal(id: string, patch: any) {
   ];
 
   saveDb(db);
+  syncCandidateRelationsLocal(id);
+  refreshAllDerivedDataLocal();
   return next;
 }
 export function softDeleteCandidateLocal(id: string) { return updateCandidateLocal(id, { is_deleted: true, deleted_at: nowIso(), deleted_by: getLocalSession()?.user_id ?? "system_local" }); }

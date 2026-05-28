@@ -5,6 +5,7 @@ import { supabase } from "@/lib/local-supabase-shim";
 import { listActiveSelections } from "@/lib/selectionService";
 import { useAuth } from "@/lib/use-auth";
 import { logAudit } from "@/lib/audit";
+import { refreshAllDerivedDataLocal, syncAllLocalRelations } from "@/lib/services/syncService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -242,7 +243,8 @@ function ImportNomorTesPage() {
         };
         const patch: Record<string, unknown> = {
           test_number: r.kes,
-          test_number_status: "Final",
+          test_number_status: "assigned",
+          no_test_missing: false,
           test_number_assigned_at: new Date().toISOString(),
           test_number_notes: `Import KES sesi ${session_id}`,
         };
@@ -282,7 +284,8 @@ function ImportNomorTesPage() {
           candidate_id: r.candidate.id, record_id: r.candidate.id,
           before: before as never,
           after: {
-            new_test_number: r.kes, new_test_number_status: "Final",
+            new_test_number: r.kes, new_test_number_status: "assigned",
+          no_test_missing: false,
             temporary_id: r.candidate.temporary_id, hari_h_stage: r.candidate.hari_h_stage,
             radiology_initial_status: r.candidate.radiology_initial_status,
             ekg_initial_status: r.candidate.ekg_initial_status,
@@ -305,7 +308,8 @@ function ImportNomorTesPage() {
           birth_place: r.birth_place,
           birth_date: r.birth_date,
           test_number: r.kes,
-          test_number_status: "Final",
+          test_number_status: "assigned",
+          no_test_missing: false,
           test_number_assigned_at: new Date().toISOString(),
           test_number_notes: `Import KES (created) sesi ${session_id}`,
           serial_number: r.no ?? null,
@@ -341,7 +345,9 @@ function ImportNomorTesPage() {
         completed_at: new Date().toISOString(),
       } as never).eq("id", session_id);
 
-      await logAudit({ action: "import_nomor_tes_completed", module: "Import Nomor Tes", record_id: session_id, after: { updated, errors, skipped } });
+      await logAudit({ action: "import_nomor_tes", module: "Import Nomor Tes", record_id: session_id, after: { updated, errors, skipped } });
+      syncAllLocalRelations({ auditAction: "import_nomor_tes", module: "Import Nomor Tes" });
+      refreshAllDerivedDataLocal();
       setResult({ session_id, updated, skipped, errors });
       toast.success(`Import selesai: ${updated} update, ${errors} error.`);
       setConfirmOpen(false);

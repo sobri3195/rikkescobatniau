@@ -38,7 +38,7 @@ function createEmptyDb() {
 }
 
 export function saveDb(db: LocalDb) { db.meta.updated_at = nowIso(); localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(db)); }
-export function setDb(db: LocalDb) { saveDb(db); return db; }
+export function setDb(db: LocalDb) { saveDb(db); if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("localDbChanged", { detail: { moduleName: "localDb_set" } })); return db; }
 export function initLocalDb() { const db = createEmptyDb(); saveDb(db); return db; }
 export function getDb(): LocalDb { try { const raw = localStorage.getItem(LOCAL_DB_KEY); if (!raw) return initLocalDb(); return migrateLocalDb(JSON.parse(raw)); } catch { return initLocalDb(); } }
 export function resetLocalDb() { return initLocalDb(); }

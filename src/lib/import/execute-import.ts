@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/local-supabase-shim";
 import { logAudit } from "@/lib/audit";
 import type { PreviewRow } from "./rikkes-xlsx-import";
+import { refreshAllDerivedDataLocal, syncAllLocalRelations } from "@/lib/services/syncService";
 
 export interface ImportOptions {
   selectionId: string;
@@ -210,11 +211,14 @@ export async function executeImport(
     .eq("id", opts.sessionId);
 
   await logAudit({
-    action: result.failed > 0 ? "import_completed_with_errors" : "import_completed",
+    action: "import_data",
     module: "Import Data",
     record_id: opts.sessionId,
     after: result as unknown,
   });
+
+  syncAllLocalRelations({ auditAction: "import_data", module: "Import Data" });
+  refreshAllDerivedDataLocal();
 
   return result;
 }
