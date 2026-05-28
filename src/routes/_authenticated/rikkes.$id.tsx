@@ -20,7 +20,8 @@ import { AttachmentsSheet } from "@/components/hari-h/AttachmentsSheet";
 import { BypassDialog } from "@/components/hari-h/BypassDialog";
 import { evaluateGate, loadHariHSettings, type HariHSettings } from "@/lib/hari-h-gating";
 import { syncGroupToRekap } from "@/lib/rekap-sync";
-import { getDb, getDisplayStatusLocal, normalizeSectionStatus, isSectionCompleted, syncNeurologiLabKeswaStatusLocal, resolveParticipantDetailLocal, logAuditLocal, generateId, nowIso } from "@/lib/localDb";
+import { getDisplayStatusLocal, normalizeSectionStatus, isSectionCompleted, syncNeurologiLabKeswaStatusLocal, resolveRikkesDetailLocal, logAuditLocal } from "@/lib/localDb";
+import { ensureExamForCandidateLocal } from "@/lib/services/examService";
 
 // Lazy-load heavy form components so initial detail render only ships the active section.
 const IdentitasAnamnesisForm = lazy(() => import("@/components/rikkes/IdentitasAnamnesisForm").then(m => ({ default: m.IdentitasAnamnesisForm })));
@@ -80,8 +81,7 @@ function RikkesDetail() {
   const canEdit = !viewerOnly && (can.editMedical(roles) || can.editCandidate(roles));
 
   const load = useCallback(async () => {
-    const resolved = resolveParticipantDetailLocal({
-      id,
+    const resolved = resolveRikkesDetailLocal(id, {
       candidateId: search?.candidateId,
       selectionId: search?.selectionId,
       temporaryId: search?.temporaryId,
@@ -109,19 +109,10 @@ function RikkesDetail() {
   }, [id, search]);
 
   const createExamNow = useCallback(() => {
-    if (!cand) return;
-    const db = getDb();
-    const existing = db.exams.find((e: any) => e.candidate_id === cand.id);
-    if (existing) { navigate({ to: "/rikkes/$id", params: { id: existing.id }, search: { candidateId: cand.id, selectionId: cand.selection_id, from: "detail-fallback" } as any }); return; }
-    const now = nowIso();
-    const examId = generateId("exam");
-    db.exams.push({ id: examId, candidate_id: cand.id, selection_id: cand.selection_id, exam_status: "In Progress", hari_h_stage: "Menunggu Rontgen & EKG", progress_percentage: 0, progress_completed_count: 0, progress_total_count: 0, created_at: now, updated_at: now });
-    const defaultSections = ["identitas","anamnesis","pemeriksaan_umum","rontgen","ekg","tht","mata_visus","bedah","neurologi","laboratorium","jiwa_keswa","resume"];
-    for (const k of defaultSections) db.exam_sections.push({ id: generateId("section"), exam_id: examId, candidate_id: cand.id, section_key: k, section_label: k, section_status: "Draft", is_required: k !== "neurologi", form_data_json: {}, created_at: now, updated_at: now });
-    localStorage.setItem("rikkes_tni_au_local_db_v1", JSON.stringify(db));
-    logAuditLocal("create_exam_from_detail_fallback", { candidate_id: cand.id, exam_id: examId, selection_id: cand.selection_id, route_params_json: { id, search } });
-    navigate({ to: "/rikkes/$id", params: { id: examId }, search: { candidateId: cand.id, selectionId: cand.selection_id, from: "detail-fallback" } as any });
-  }, [cand, id, navigate, search]);
+    if (!cand?.id) return;
+    const createdExam = ensureExamForCandidateLocal(cand.id);
+    navigate({ to: "/rikkes/$id", params: { id: createdExam.id }, search: { candidateId: cand.id, selectionId: cand.selection_id, from: "detail-fallback" } as any });
+  }, [cand, navigate]);
 
   useEffect(() => {
     load();

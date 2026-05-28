@@ -297,3 +297,25 @@ export function resolveParticipantDetailLocal(params: {
     error: candidate ? (exam ? null : "EXAM_MISSING") : "PARTICIPANT_NOT_FOUND",
   };
 }
+
+
+export function resolveRikkesDetailLocal(id: string, searchParams?: { candidateId?: string | null; selectionId?: string | null; temporaryId?: string | null; testNumber?: string | null; }) {
+  const resolved = resolveParticipantDetailLocal({
+    id,
+    candidateId: searchParams?.candidateId ?? null,
+    selectionId: searchParams?.selectionId ?? null,
+    temporaryId: searchParams?.temporaryId ?? null,
+    testNumber: searchParams?.testNumber ?? null,
+  });
+
+  return {
+    exam: resolved.exam ?? null,
+    candidate: resolved.candidate ?? null,
+    source: resolved.source,
+    error: resolved.error,
+    sections: resolved.sections ?? [],
+    radiology: resolved.radiology ?? [],
+    cardiology: resolved.cardiology ?? [],
+    attachments: resolved.attachments ?? [],
+  };
+}
