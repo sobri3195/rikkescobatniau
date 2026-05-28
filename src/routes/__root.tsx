@@ -1,16 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  Outlet,
-  Link,
-  createRootRouteWithContext,
-  useRouter,
-  HeadContent,
-  Scripts,
-} from "@tanstack/react-router";
-
-import appCss from "../styles.css?url";
+import { Outlet, Link, createRootRouteWithContext, useRouter } from "@tanstack/react-router";
 import { Toaster } from "sonner";
-import faviconUrl from "../assets/rikkes-logo.png?url";
 
 function NotFoundComponent() {
   return (
@@ -41,9 +31,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
-        </h1>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">This page didn't load</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Something went wrong on our end. You can try refreshing or head back home.
         </p>
@@ -70,47 +58,10 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "RIKKES TNI AU — Sistem Digital Pemeriksaan Kesehatan" },
-      { name: "description", content: "Sistem Digital RIKKES TNI AU — pemeriksaan kesehatan seleksi terpadu." },
-      { name: "author", content: "Diskesau" },
-      { property: "og:title", content: "RIKKES TNI AU — Sistem Digital Pemeriksaan Kesehatan" },
-      { property: "og:description", content: "Sistem Digital RIKKES TNI AU — pemeriksaan kesehatan seleksi terpadu." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
-      { name: "twitter:title", content: "RIKKES TNI AU — Sistem Digital Pemeriksaan Kesehatan" },
-      { name: "twitter:description", content: "Sistem Digital RIKKES TNI AU — pemeriksaan kesehatan seleksi terpadu." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/134eaf4f-59e2-4444-87f7-068e215513f6/id-preview-63c441bd--c5a233bf-c48d-4e21-9a8d-8888494efe56.lovable.app-1779190121187.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/134eaf4f-59e2-4444-87f7-068e215513f6/id-preview-63c441bd--c5a233bf-c48d-4e21-9a8d-8888494efe56.lovable.app-1779190121187.png" },
-    ],
-    links: [
-      { rel: "stylesheet", href: appCss },
-      { rel: "icon", type: "image/png", href: faviconUrl },
-      { rel: "apple-touch-icon", href: faviconUrl },
-    ],
-  }),
-  shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
   errorComponent: ErrorComponent,
 });
-
-function RootShell({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  );
-}
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
