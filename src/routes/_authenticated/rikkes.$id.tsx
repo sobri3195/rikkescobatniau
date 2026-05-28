@@ -20,7 +20,7 @@ import { AttachmentsSheet } from "@/components/hari-h/AttachmentsSheet";
 import { BypassDialog } from "@/components/hari-h/BypassDialog";
 import { evaluateGate, loadHariHSettings, type HariHSettings } from "@/lib/hari-h-gating";
 import { syncGroupToRekap } from "@/lib/rekap-sync";
-import { getDisplayStatusLocal, normalizeSectionStatus, isSectionCompleted, syncNeurologiLabKeswaStatusLocal, resolveRikkesDetailLocal, logAuditLocal } from "@/lib/localDb";
+import { getDb, getDisplayStatusLocal, normalizeSectionStatus, isSectionCompleted, syncNeurologiLabKeswaStatusLocal, resolveRikkesDetailLocal, logAuditLocal } from "@/lib/localDb";
 import { ensureExamForCandidateLocal } from "@/lib/services/examService";
 import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
 
