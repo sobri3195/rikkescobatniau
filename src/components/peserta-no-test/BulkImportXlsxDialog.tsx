@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/local-supabase-shim";
 import { createSelection, listActiveSelections } from "@/lib/selectionService";
 import { logAudit } from "@/lib/audit";
+import { createCandidateLocal } from "@/lib/services/candidateService";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -217,16 +218,16 @@ export function BulkImportXlsxDialog({
         });
       }
 
-      // Batched insert (trigger auto-creates exam + sections)
-      for (let i = 0; i < candidates.length; i += 50) {
-        const chunk = candidates.slice(i, i + 50);
-        const { data, error } = await supabase.from("candidates").insert(chunk as never).select("id");
-        if (error) {
-          failed += chunk.length;
-          errors.push(`Batch ${i / 50 + 1}: ${error.message}`);
-          await logAudit({ action: "import_candidate_row_failed", module: "Bulk Import Peserta", after: { batch: i / 50 + 1, error: error.message } });
-        } else {
-          inserted += data?.length ?? 0;
+      for (let i = 0; i < candidates.length; i += 1) {
+        const candidate = candidates[i];
+        try {
+          createCandidateLocal(candidate);
+          inserted += 1;
+        } catch (error: any) {
+          failed += 1;
+          const message = error?.message ?? "Gagal membuat kandidat";
+          errors.push(`Baris ${i + 1}: ${message}`);
+          await logAudit({ action: "import_candidate_row_failed", module: "Bulk Import Peserta", after: { row: i + 1, error: message } });
         }
       }
 
