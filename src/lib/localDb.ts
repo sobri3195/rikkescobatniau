@@ -28,8 +28,11 @@ function createEmptyDb() {
     auth: { current_user_id: "user_superadmin", current_role: "super_admin" },
     users: [{ id: "user_superadmin", name: "Super Admin", role: "super_admin", username: "admin", password: "admin123" }],
     selections: [], candidates: [], exams: [], exam_sections: [],
-    exam_radiology: [], exam_cardiology: [], exam_ent: [], exam_eye: [], exam_surgery: [], exam_neurology: [], exam_laboratory: [], exam_psychiatry: [],
-    medical_attachments: [], medical_history_forms: [], test_number_import_sessions: [], test_number_import_rows: [], bulk_import_sessions: [], audit_logs: [],
+    medical_history_forms: [],
+    exam_radiology: [], exam_cardiology: [], exam_neurology: [], exam_laboratory: [], exam_ent: [], exam_surgery: [], exam_eye: [], exam_dental: [], exam_psychiatry: [],
+    medical_attachments: [], notifications: [], user_section_assignments: [],
+    audit_logs: [], file_access_logs: [],
+    test_number_import_sessions: [], test_number_import_rows: [], bulk_import_sessions: [],
     settings: { neuro_required: false, progress_weights: {}, active_selection_id: null as string | null },
   };
 }
