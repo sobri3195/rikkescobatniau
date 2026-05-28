@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { logAudit } from "@/lib/audit";
-import { getDb, localDb } from "@/lib/localDb";
+import { getDb } from "@/lib/localDb";
+import { createCandidateLocal } from "@/lib/services/candidateService";
 import { isLocalMode } from "@/lib/storage-mode";
 import { listActiveSelections } from "@/lib/services/selectionService";
 
@@ -88,24 +88,10 @@ export function CreateNoTestCandidateDialog({ open, onOpenChange, onCreated }: P
           setSaving(false);
           return toast.error("No Test sudah dipakai pada seleksi ini");
         }
-        const cand = localDb.candidates.create({
-          selection_id: form.selection_id,
+        const cand = createCandidateLocal({
+          ...form,
           full_name: form.full_name.trim(),
-          gender: form.gender,
-          unit_position: form.unit_position || null,
-          rank: form.rank || null,
-          nrp_nip: form.nrp_nip || null,
-          birth_place: form.birth_place || null,
-          birth_date: form.birth_date || null,
-          group_name: form.group_name || null,
-          pok_korp: form.pok_korp || null,
-          panda: form.panda || null,
-          address: form.address || null,
-          phone: form.phone || null,
-          registration_notes: form.registration_notes || null,
-          test_number: tn || null,
-          test_number_status: tn ? "Final" : "Belum Ada",
-          combined_identity: `${form.full_name.trim()} ${form.rank ? `(${form.rank})` : ""} ${form.nrp_nip ?? ""}`.trim(),
+          test_number: tn,
         });
         await logAudit({ action: tn ? "create_candidate" : "create_candidate_without_test_number", module: "peserta_tanpa_no_test", record_id: cand.id, candidate_id: cand.id, after: cand });
         toast.success(tn ? `Peserta dibuat dengan No Test ${tn}` : `Peserta dibuat dengan Temporary ID ${cand.temporary_id ?? "(TMP)"}`);
@@ -114,69 +100,7 @@ export function CreateNoTestCandidateDialog({ open, onOpenChange, onCreated }: P
         onOpenChange(false);
         return;
       }
-      if (tn) {
-        const { data: dup } = await supabase
-          .from("candidates")
-          .select("id")
-          .eq("selection_id", form.selection_id)
-          .eq("test_number", tn)
-          .is("deleted_at", null)
-          .limit(1)
-          .maybeSingle();
-        if (dup) {
-          setSaving(false);
-          return toast.error("No Test sudah dipakai pada seleksi ini");
-        }
-      }
-
-      const payload: Record<string, unknown> = {
-        selection_id: form.selection_id,
-        full_name: form.full_name.trim(),
-        gender: form.gender,
-        unit_position: form.unit_position || null,
-        rank: form.rank || null,
-        nrp_nip: form.nrp_nip || null,
-        birth_place: form.birth_place || null,
-        group_name: form.group_name || null,
-        pok_korp: form.pok_korp || null,
-        panda: form.panda || null,
-        address: form.address || null,
-        phone: form.phone || null,
-        registration_notes: form.registration_notes || null,
-        test_number: tn || null,
-        test_number_status: tn ? "Final" : "Belum Ada",
-        combined_identity: `${form.full_name.trim()} ${form.rank ? `(${form.rank})` : ""} ${form.nrp_nip ?? ""}`.trim(),
-      };
-      if (form.birth_date) payload.birth_date = form.birth_date;
-      if (tn) {
-        const { data: u } = await supabase.auth.getUser();
-        payload.test_number_assigned_at = new Date().toISOString();
-        payload.test_number_assigned_by = u.user?.id ?? null;
-      }
-
-      const { data: cand, error } = await supabase
-        .from("candidates")
-        .insert(payload as never)
-        .select()
-        .single();
-      if (error) throw error;
-
-      await logAudit({
-        action: tn ? "create_candidate" : "create_candidate_without_test_number",
-        module: "peserta_tanpa_no_test",
-        record_id: cand.id,
-        candidate_id: cand.id,
-        after: cand,
-      });
-
-      toast.success(
-        tn
-          ? `Peserta dibuat dengan No Test ${tn}`
-          : `Peserta dibuat dengan Temporary ID ${cand.temporary_id ?? "(TMP)"}`,
-      );
-      setForm({ ...INITIAL, selection_id: form.selection_id });
-      onCreated();
-      onOpenChange(false);
+      throw new Error("Mode Supabase tidak didukung");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Gagal menyimpan";
       toast.error(msg);

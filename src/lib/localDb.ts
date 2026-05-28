@@ -38,9 +38,21 @@ function createEmptyDb() {
 }
 
 export function saveDb(db: LocalDb) { db.meta.updated_at = nowIso(); localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(db)); }
+export function setDb(db: LocalDb) { saveDb(db); return db; }
 export function initLocalDb() { const db = createEmptyDb(); saveDb(db); return db; }
-export function getDb(): LocalDb { try { const raw = localStorage.getItem(LOCAL_DB_KEY); if (!raw) return initLocalDb(); return JSON.parse(raw); } catch { return initLocalDb(); } }
+export function getDb(): LocalDb { try { const raw = localStorage.getItem(LOCAL_DB_KEY); if (!raw) return initLocalDb(); return migrateLocalDb(JSON.parse(raw)); } catch { return initLocalDb(); } }
 export function resetLocalDb() { return initLocalDb(); }
+
+export function migrateLocalDb(input?: any): LocalDb {
+  const db: any = input ?? (() => { try { return JSON.parse(localStorage.getItem(LOCAL_DB_KEY) ?? "null"); } catch { return null; } })() ?? createEmptyDb();
+  const base: any = createEmptyDb();
+  for (const k of Object.keys(base)) if (db[k] === undefined) db[k] = base[k];
+  db.settings = { ...base.settings, ...(db.settings ?? {}) };
+  db.candidates = (db.candidates ?? []).map((c: any) => ({ ...c, id: c.id ?? generateId("cand"), is_deleted: c.is_deleted ?? false, test_number: c.test_number ?? "", no_test_missing: c.no_test_missing ?? !String(c.test_number ?? "").trim(), test_number_status: c.test_number_status ?? (String(c.test_number ?? "").trim() ? "assigned" : "pending"), temporary_id: c.temporary_id || (String(c.test_number ?? "").trim() ? "" : `TMP-${new Date().toISOString().slice(0,10).replace(/-/g,"")}-${String(Math.floor(Math.random()*9999)+1).padStart(4,"0")}`) }));
+  saveDb(db);
+  return db;
+}
+
 export function seedLocalDb() { const db = getDb(); if (!db.selections.length) db.selections.push({ id: generateId("sel"), name: "Seleksi Demo", year: "2026" }); saveDb(db); return db; }
 export function exportLocalDb() { return JSON.stringify(getDb(), null, 2); }
 export function importLocalDb(json: string) { const parsed = JSON.parse(json); localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(parsed)); return parsed; }
