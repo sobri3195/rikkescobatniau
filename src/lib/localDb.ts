@@ -319,3 +319,19 @@ export function resolveRikkesDetailLocal(id: string, searchParams?: { candidateI
     attachments: resolved.attachments ?? [],
   };
 }
+
+
+export function addAuditLogLocal(input: any) {
+  const db = getDb() as any;
+  db.audit_logs = db.audit_logs ?? [];
+  db.audit_logs.push({
+    id: generateId("audit"),
+    action: input?.action ?? "local_audit",
+    module: input?.module ?? "local",
+    user_id: getLocalSession()?.user_id ?? db.auth?.current_user_id ?? "system_local",
+    role: getLocalSession()?.role ?? db.auth?.current_role ?? "system",
+    ...input,
+    created_at: input?.created_at ?? nowIso(),
+  });
+  saveDb(db);
+}

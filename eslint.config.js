@@ -29,6 +29,20 @@ export default tseslint.config(
               message:
                 "TanStack Start does not use the Next.js `server-only` package. Rename the module to `*.server.ts` or mark it with `@tanstack/react-start/server-only`.",
             },
+            {
+              name: "@supabase/supabase-js",
+              message: "Supabase dilarang. Gunakan localDb/localStorage service.",
+            },
+            {
+              name: "@/integrations/supabase/client",
+              message: "Supabase client dilarang. Gunakan localDb/localStorage service.",
+            },
+          ],
+          patterns: [
+            {
+              group: ["**/integrations/supabase/**"],
+              message: "Supabase integration dilarang di mode localStorage.",
+            },
           ],
         },
       ],
