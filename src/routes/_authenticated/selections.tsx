@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { createSelection, deleteSelection, isLocalStorageMode, listSelections, updateSelection } from "@/lib/selectionService";
+import { createSelection, deleteSelection, listSelections, setDefaultSelection, updateSelection } from "@/lib/selectionService";
 import { getDb } from "@/lib/localDb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,27 +78,26 @@ function SelectionsPage() {
   }, [items, search, statusFilter]);
 
   async function setAsDefault(s: Selection) {
+    await setDefaultSelection(s.id);
     const db = getDb() as any;
-    db.selections = (db.selections ?? []).map((x: any) => ({ ...x, is_default: x.id === s.id, status: x.id === s.id ? "Aktif" : x.status }));
-    localStorage.setItem("rikkes_tni_au_local_db_v1", JSON.stringify(db));
     await logAudit({ action: "set_default", module: "selections", record_id: s.id, before: s, after: db.selections.find((x: any) => x.id === s.id) });
     toast.success("Seleksi default diperbarui");
     load();
   }
 
   async function toggleStatus(s: Selection) {
-    const next = (s.status ?? "").toLowerCase() === "nonaktif" ? "Aktif" : "Nonaktif";
+    const next = ["inactive", "nonaktif"].includes((s.status ?? "").toLowerCase()) ? "active" : "inactive";
     const patch: any = { status: next };
-    if (next === "Nonaktif" && s.is_default) patch.is_default = false;
+    if (next === "inactive" && s.is_default) patch.is_default = false;
     const data = await updateSelection(s.id, patch);
     await logAudit({
-      action: next === "Nonaktif" ? "deactivate" : "activate",
+      action: next === "inactive" ? "deactivate" : "activate",
       module: "selections",
       record_id: s.id,
       before: s,
       after: data,
     });
-    toast.success(`Seleksi ${next === "Nonaktif" ? "dinonaktifkan" : "diaktifkan"}`);
+    toast.success(`Seleksi ${next === "inactive" ? "dinonaktifkan" : "diaktifkan"}`);
     load();
   }
 
@@ -158,8 +157,8 @@ function SelectionsPage() {
           <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Semua status</SelectItem>
-            <SelectItem value="aktif">Aktif</SelectItem>
-            <SelectItem value="nonaktif">Nonaktif</SelectItem>
+            <SelectItem value="active">Aktif</SelectItem>
+            <SelectItem value="inactive">Nonaktif</SelectItem>
             <SelectItem value="draft">Draft</SelectItem>
           </SelectContent>
         </Select>
