@@ -28,6 +28,7 @@ import { AlertTriangle, Save, Send, Undo2, FileDown, Loader2, Lock, CheckCircle2
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { updateCandidateLocal } from "@/lib/services/candidateService";
 
 /* =========================================================
  * Constants — sesuai blangko Anamnesa RIKKES TNI AU
@@ -161,6 +162,7 @@ export type AnamnesisRow = {
 };
 
 function buildDefaults(cand: any): Partial<AnamnesisRow> {
+  const normalizedTestNumber = String(cand?.test_number ?? "").trim();
   return {
     identity_data_json: {
       full_name: cand?.full_name ?? "",
@@ -169,11 +171,12 @@ function buildDefaults(cand: any): Partial<AnamnesisRow> {
       selection_label: "",
       panda: cand?.panda ?? "",
       exam_purpose: "",
-      test_number: cand?.test_number ?? "",
+      test_number: normalizedTestNumber || cand?.temporary_id || "",
       rank: cand?.rank ?? "",
       nrp_nip: cand?.nrp_nip ?? "",
       unit_position: cand?.unit_position ?? "",
-      group_name: cand?.pok_korp ?? "",
+      group_name: cand?.group_name ?? "",
+      pok_korp: cand?.pok_korp ?? "",
       gender: cand?.gender ?? "L",
       address: cand?.address ?? "",
       phone: cand?.phone ?? "",
@@ -356,6 +359,28 @@ export function IdentitasAnamnesisForm({
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnReason, setReturnReason] = useState("");
   const [openSections, setOpenSections] = useState<string[]>(["sec1"]);
+  const applyCandidateIdentity = useCallback((payload: any) => {
+    if (!cand?.id) return;
+    const nextTestNumber = String(payload?.test_number ?? "").trim();
+    updateCandidateLocal(cand.id, {
+      full_name: payload?.full_name ?? "",
+      selection_id: cand?.selection_id ?? "",
+      birth_place: payload?.birth_place ?? "",
+      birth_date: payload?.birth_date ?? "",
+      gender: payload?.gender ?? "L",
+      rank: payload?.rank ?? "",
+      nrp_nip: payload?.nrp_nip ?? "",
+      unit_position: payload?.unit_position ?? "",
+      pok_korp: payload?.pok_korp ?? "",
+      panda: payload?.panda ?? "",
+      group_name: payload?.group_name ?? "",
+      phone: payload?.phone ?? "",
+      address: payload?.address ?? "",
+      test_number: nextTestNumber,
+      test_number_status: nextTestNumber ? "assigned" : "pending",
+      no_test_missing: !nextTestNumber,
+    });
+  }, [cand?.id, cand?.selection_id]);
 
   const load = useCallback(async () => {
     if (!exam?.id) return;
@@ -366,7 +391,16 @@ export function IdentitasAnamnesisForm({
       .eq("exam_id", exam.id)
       .maybeSingle();
     if (data) {
-      setRow(data as AnamnesisRow);
+      const defaults = buildDefaults(cand);
+      setRow({
+        ...(data as AnamnesisRow),
+        identity_data_json: {
+          ...(data?.identity_data_json ?? {}),
+          ...(defaults.identity_data_json ?? {}),
+          selection_label: selectionLabel ?? "",
+          exam_purpose: data?.identity_data_json?.exam_purpose ?? "",
+        },
+      } as AnamnesisRow);
     } else {
       const defaults = buildDefaults(cand);
       defaults.identity_data_json = {
@@ -568,6 +602,7 @@ export function IdentitasAnamnesisForm({
       }
       const saved = await persist({}, status === "Submitted" ? "Submitted" : "Draft");
       if (!saved) return;
+      applyCandidateIdentity(saved.identity_data_json ?? row?.identity_data_json ?? {});
       setRow(saved);
       await onSyncSection?.(saved.status, saved.submitted_at);
       await logAudit({ action: "save_draft_anamnesis", module: "Identitas & Anamnesis", candidate_id: cand.id, record_id: exam.id });
@@ -595,6 +630,7 @@ export function IdentitasAnamnesisForm({
         candidate_signed_at: row?.candidate_signed_at ?? now,
       } as any, "Submitted");
       if (!saved) return;
+      applyCandidateIdentity(saved.identity_data_json ?? row?.identity_data_json ?? {});
       setRow(saved);
       await onSyncSection?.("Submitted", saved.submitted_at);
       await logAudit({ action: "submit_anamnesis", module: "Identitas & Anamnesis", candidate_id: cand.id, record_id: exam.id });
@@ -1042,7 +1078,7 @@ export function IdentitasAnamnesisForm({
               <Field label="Nomor Test *"><Input value={row.identity_data_json?.test_number ?? ""} onChange={(e) => patchIdentity({ test_number: e.target.value })} disabled={!canEditCandidateData} /></Field>
               <Field label="Tempat Lahir *"><Input value={row.identity_data_json?.birth_place ?? ""} onChange={(e) => patchIdentity({ birth_place: e.target.value })} disabled={!canEditCandidateData} /></Field>
               <Field label="Tanggal Lahir *"><Input type="date" value={row.identity_data_json?.birth_date ?? ""} onChange={(e) => patchIdentity({ birth_date: e.target.value })} disabled={!canEditCandidateData} /></Field>
-              <Field label="Seleksi *"><Input value={row.identity_data_json?.selection_label ?? ""} onChange={(e) => patchIdentity({ selection_label: e.target.value })} placeholder="Contoh: SEMABA GEL I A-55 TA 2025" disabled={!canEditCandidateData} /></Field>
+              <Field label="Seleksi *"><Input value={row.identity_data_json?.selection_label ?? ""} readOnly disabled placeholder="Diambil otomatis dari data seleksi peserta" /></Field>
               <Field label="Asal Panda *"><Input value={row.identity_data_json?.panda ?? ""} onChange={(e) => patchIdentity({ panda: e.target.value })} disabled={!canEditCandidateData} /></Field>
               <Field label="Maksud Pemeriksaan *"><Input value={row.identity_data_json?.exam_purpose ?? ""} onChange={(e) => patchIdentity({ exam_purpose: e.target.value })} placeholder="Pemeriksaan Berkala / Seleksi Pendidikan / RIKKES" disabled={!canEditCandidateData} /></Field>
               <Field label="Pangkat"><Input value={row.identity_data_json?.rank ?? ""} onChange={(e) => patchIdentity({ rank: e.target.value })} disabled={!canEditCandidateData} /></Field>

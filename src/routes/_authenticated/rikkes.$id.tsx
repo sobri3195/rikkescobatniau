@@ -290,6 +290,11 @@ function RikkesDetail() {
   const locked = activeStatus === "Locked";
   const submitted = activeStatus === "Submitted" || activeStatus === "Approved";
   const readOnly = viewerOnly || locked || (submitted && !canEdit);
+  const selectionLabel = useMemo(() => {
+    const db = getDb() as any;
+    const selection = (db.selections ?? []).find((s: any) => s.id === cand?.selection_id);
+    return selection?.selection_name ?? selection?.name ?? "";
+  }, [cand?.selection_id]);
 
   return (
     <div className="p-6 lg:p-8 space-y-6 min-h-screen">
@@ -546,7 +551,7 @@ function FormHeader(props: {
 
       <div className="p-5">
         <Suspense fallback={<SectionSkeleton />}>
-          <ActiveForm active={active} cand={cand} examId={examId} data={formData} onChange={setFormData} readOnly={effectiveReadOnly} canEditAfterSubmit={canEditAfterSubmit} onPersisted={onPersisted} />
+          <ActiveForm active={active} cand={cand} examId={examId} selectionLabel={selectionLabel} data={formData} onChange={setFormData} readOnly={effectiveReadOnly} canEditAfterSubmit={canEditAfterSubmit} onPersisted={onPersisted} />
         </Suspense>
       </div>
 
@@ -631,10 +636,10 @@ function RikkesDetailSkeleton() {
 
 /* -------------------- Active form router -------------------- */
 
-function ActiveForm({ active, cand, examId, data, onChange, readOnly, canEditAfterSubmit, onPersisted }: { active: RikkesGroupKey; cand: any; examId?: string; data: any; onChange: (d: any) => void; readOnly: boolean; canEditAfterSubmit?: boolean; onPersisted?: () => void }) {
+function ActiveForm({ active, cand, examId, selectionLabel, data, onChange, readOnly, canEditAfterSubmit, onPersisted }: { active: RikkesGroupKey; cand: any; examId?: string; selectionLabel?: string; data: any; onChange: (d: any) => void; readOnly: boolean; canEditAfterSubmit?: boolean; onPersisted?: () => void }) {
   const set = (patch: any) => onChange({ ...data, ...patch });
   switch (active) {
-    case "identitas_anamnesis": return <IdentitasAnamnesisForm cand={cand} exam={{ id: examId }} />;
+    case "identitas_anamnesis": return <IdentitasAnamnesisForm cand={cand} exam={{ id: examId }} selectionLabel={selectionLabel} />;
     case "screening_hari_h": return <ScreeningHariHForm cand={cand} examId={examId} />;
     case "lembar_evaluasi_umum": return <PemeriksaanUmumForm cand={cand} examId={examId} />;
     case "evaluasi_klinis": return <ClinicalForm data={data} set={set} readOnly={readOnly} />;
