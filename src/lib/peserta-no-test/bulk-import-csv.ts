@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/local-supabase-shim";
 import { logAudit } from "@/lib/audit";
+import { createCandidateLocal } from "@/lib/services/candidateService";
 
 export type CsvRow = {
   rowNumber: number;
@@ -171,20 +172,18 @@ export async function applyCsvImport(rows: CsvRow[], selectionId: string): Promi
     source_import_session_id: sessionId,
   }));
 
-  // Insert in batches of 100 to avoid payload limits
   let inserted = 0;
   let failed = 0;
   const errors: string[] = [];
-  for (let i = 0; i < payload.length; i += 100) {
-    const chunk = payload.slice(i, i + 100);
-    const { data, error } = await supabase.from("candidates").insert(chunk as never).select("id, full_name, temporary_id, test_number");
-    if (error) {
-      failed += chunk.length;
-      errors.push(`Batch ${i / 100 + 1}: ${error.message}`);
-    } else {
-      inserted += data?.length ?? 0;
+  payload.forEach((row, idx) => {
+    try {
+      createCandidateLocal(row);
+      inserted += 1;
+    } catch (error: any) {
+      failed += 1;
+      errors.push(`Baris ${idx + 1}: ${error?.message ?? "Gagal membuat kandidat"}`);
     }
-  }
+  });
 
   if (sessionId) {
     await supabase.from("import_sessions").update({
