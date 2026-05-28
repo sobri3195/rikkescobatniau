@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
+import { listActiveSelections } from "@/lib/selectionService";
 import {
   detectWorkbookSheets, mergeAndValidate, parseAbsenSheet, parseAplikasiSheet,
   parseResumeCasisSheet, readWorkbook, type PreviewRow,
@@ -45,8 +46,7 @@ function ImportDataPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.from("selections").select("id,name,year_label").order("created_at", { ascending: false })
-      .then(({ data }) => setSelections(data || []));
+    listActiveSelections().then((data) => setSelections((data as any) || []));
   }, []);
 
   async function handleFileChosen(f: File) {
