@@ -183,9 +183,9 @@ function IncompletePage() {
       after: { focus, issues: r.issues },
     });
     navigate({
-      to: "/candidates/$id",
-      params: { id: r.candidate_id },
-      search: focus ? { focus } : undefined,
+      to: "/rikkes/$id",
+      params: { id: r.exam_id ?? r.candidate_id },
+      search: { ...(focus ? { focus } : {}), from: "data-belum-lengkap", selectionId: r.selection_id, candidateId: r.candidate_id } as any,
     });
   }
 

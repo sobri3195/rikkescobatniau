@@ -129,3 +129,69 @@ export const localDb = {
     },
   },
 };
+
+export function logAuditLocal(action: string, payload: Record<string, any> = {}) {
+  const db = getDb();
+  db.audit_logs.push({
+    id: generateId("audit"),
+    user_id: db.auth.current_user_id ?? "system_local",
+    role: db.auth.current_role ?? "system",
+    action,
+    module: "Detail Navigation Local",
+    candidate_id: payload.candidate_id ?? null,
+    exam_id: payload.exam_id ?? null,
+    selection_id: payload.selection_id ?? null,
+    route_params_json: payload.route_params_json ?? null,
+    lookup_result_json: payload.lookup_result_json ?? null,
+    created_at: nowIso(),
+  });
+  saveDb(db);
+}
+
+export function resolveParticipantDetailLocal(params: {
+  id?: string | null; candidateId?: string | null; selectionId?: string | null; temporaryId?: string | null; testNumber?: string | null;
+}) {
+  const db = getDb();
+  const id = params.id ?? null;
+  let candidate: any = null;
+  let exam: any = null;
+  let source = "not_found";
+  if (id) {
+    exam = db.exams.find((e: any) => e.id === id) ?? null;
+    if (exam) {
+      candidate = db.candidates.find((c: any) => c.id === exam.candidate_id) ?? null;
+      source = "exam_id";
+    }
+  }
+  if (!candidate && params.candidateId) {
+    candidate = db.candidates.find((c: any) => c.id === params.candidateId) ?? null;
+    if (candidate) source = "candidate_id";
+  }
+  if (!candidate && id) {
+    candidate = db.candidates.find((c: any) => c.id === id) ?? null;
+    if (candidate) source = "route_id_as_candidate";
+  }
+  if (!candidate && params.temporaryId) {
+    candidate = db.candidates.find((c: any) => c.temporary_id === params.temporaryId) ?? null;
+    if (candidate) source = "temporary_id";
+  }
+  if (!candidate && params.testNumber) {
+    candidate = db.candidates.find((c: any) => c.test_number === params.testNumber) ?? null;
+    if (candidate) source = "test_number";
+  }
+  if (!exam && candidate) {
+    exam = db.exams.find((e: any) => e.candidate_id === candidate.id && (!params.selectionId || e.selection_id === params.selectionId))
+      ?? db.exams.find((e: any) => e.candidate_id === candidate.id)
+      ?? null;
+  }
+  return {
+    candidate,
+    exam,
+    sections: exam ? db.exam_sections.filter((s: any) => s.exam_id === exam.id) : [],
+    radiology: exam ? db.exam_radiology.filter((x: any) => x.exam_id === exam.id) : [],
+    cardiology: exam ? db.exam_cardiology.filter((x: any) => x.exam_id === exam.id) : [],
+    attachments: exam ? db.medical_attachments.filter((x: any) => x.exam_id === exam.id) : [],
+    source: candidate ? (exam ? source : "candidate_found_exam_missing") : "not_found",
+    error: candidate ? (exam ? null : "EXAM_MISSING") : "PARTICIPANT_NOT_FOUND",
+  };
+}

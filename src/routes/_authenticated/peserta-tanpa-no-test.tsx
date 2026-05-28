@@ -448,7 +448,7 @@ function PesertaTanpaNoTestPage() {
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-[11px]">
-                            <Link to="/candidates/$id" params={{ id: r.id }}>
+                            <Link to="/rikkes/$id" params={{ id: r.exam_id ?? r.id }} search={{ from: "peserta-tanpa-no-test", candidateId: r.id, selectionId: r.selection_id }}>
                               <ExternalLink className="h-3 w-3 mr-1" /> Buka
                             </Link>
                           </Button>
