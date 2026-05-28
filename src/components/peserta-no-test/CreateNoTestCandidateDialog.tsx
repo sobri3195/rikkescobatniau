@@ -8,8 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { logAudit } from "@/lib/audit";
+import { getDb, localDb } from "@/lib/localDb";
+import { isLocalMode } from "@/lib/storage-mode";
+import { listActiveSelections } from "@/lib/services/selectionService";
 
-type Selection = { id: string; name: string; year_label?: string | null };
+type Selection = { id: string; name?: string; selection_name?: string; year_label?: string | null; year?: string | number | null; type?: string | null; selection_type?: string | null; status?: string | null };
 
 type Props = {
   open: boolean;
@@ -42,16 +45,25 @@ export function CreateNoTestCandidateDialog({ open, onOpenChange, onCreated }: P
 
   useEffect(() => {
     if (!open) return;
-    supabase
-      .from("selections")
-      .select("id, name, year_label")
-      .order("created_at", { ascending: false })
-      .limit(100)
-      .then(({ data }) => {
-        const list = (data ?? []) as Selection[];
-        setSelections(list);
-        setForm((f) => ({ ...f, selection_id: f.selection_id || list[0]?.id || "" }));
-      });
+    listActiveSelections().then((list) => {
+      const rows = (list ?? []) as Selection[];
+      setSelections(rows);
+      const db = getDb() as any;
+      const defaultSelectionId = db.settings?.active_selection_id;
+      const nextSelection =
+        (defaultSelectionId && rows.some((s) => s.id === defaultSelectionId) ? defaultSelectionId : "")
+        || (rows.length === 1 ? rows[0].id : "")
+        || form.selection_id;
+      setForm((f) => ({ ...f, selection_id: nextSelection }));
+
+      if (import.meta.env.DEV && rows.length === 0) {
+        console.log("[CreateNoTestCandidateDialog] localStorage key exists:", !!localStorage.getItem("rikkes_tni_au_local_db_v1"));
+        console.log("[CreateNoTestCandidateDialog] total selections:", (db.selections ?? []).length);
+        console.log("[CreateNoTestCandidateDialog] active selections:", rows.length);
+        console.log("[CreateNoTestCandidateDialog] selected selectionId:", nextSelection);
+        console.log("[CreateNoTestCandidateDialog] settings.active_selection_id:", defaultSelectionId);
+      }
+    });
   }, [open]);
 
   function set<K extends keyof typeof INITIAL>(k: K, v: string) {
@@ -63,9 +75,45 @@ export function CreateNoTestCandidateDialog({ open, onOpenChange, onCreated }: P
     if (!form.selection_id) return toast.error("Pilih seleksi terlebih dahulu");
     if (!form.full_name.trim()) return toast.error("Nama lengkap wajib diisi");
 
+    const activeSelectionIds = new Set((await listActiveSelections()).map((s: any) => s.id));
+    if (!activeSelectionIds.has(form.selection_id)) return toast.error("Pilih seleksi terlebih dahulu.");
+
     setSaving(true);
     try {
       const tn = form.test_number.trim();
+      if (isLocalMode) {
+        const db = getDb() as any;
+        const dup = (db.candidates ?? []).find((c: any) => c.selection_id === form.selection_id && c.test_number === tn);
+        if (tn && dup) {
+          setSaving(false);
+          return toast.error("No Test sudah dipakai pada seleksi ini");
+        }
+        const cand = localDb.candidates.create({
+          selection_id: form.selection_id,
+          full_name: form.full_name.trim(),
+          gender: form.gender,
+          unit_position: form.unit_position || null,
+          rank: form.rank || null,
+          nrp_nip: form.nrp_nip || null,
+          birth_place: form.birth_place || null,
+          birth_date: form.birth_date || null,
+          group_name: form.group_name || null,
+          pok_korp: form.pok_korp || null,
+          panda: form.panda || null,
+          address: form.address || null,
+          phone: form.phone || null,
+          registration_notes: form.registration_notes || null,
+          test_number: tn || null,
+          test_number_status: tn ? "Final" : "Belum Ada",
+          combined_identity: `${form.full_name.trim()} ${form.rank ? `(${form.rank})` : ""} ${form.nrp_nip ?? ""}`.trim(),
+        });
+        await logAudit({ action: tn ? "create_candidate" : "create_candidate_without_test_number", module: "peserta_tanpa_no_test", record_id: cand.id, candidate_id: cand.id, after: cand });
+        toast.success(tn ? `Peserta dibuat dengan No Test ${tn}` : `Peserta dibuat dengan Temporary ID ${cand.temporary_id ?? "(TMP)"}`);
+        setForm({ ...INITIAL, selection_id: form.selection_id });
+        onCreated();
+        onOpenChange(false);
+        return;
+      }
       if (tn) {
         const { data: dup } = await supabase
           .from("candidates")
@@ -157,10 +205,11 @@ export function CreateNoTestCandidateDialog({ open, onOpenChange, onCreated }: P
                 <option value="">— Pilih Seleksi —</option>
                 {selections.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name} {s.year_label ? `— ${s.year_label}` : ""}
+                    {(s.selection_name ?? s.name) || "Tanpa Nama"} — TA {s.year ?? s.year_label ?? "-"} · {s.type ?? s.selection_type ?? "-"}
                   </option>
                 ))}
               </select>
+              {!selections.length && <p className="text-xs text-amber-600">Belum ada seleksi aktif. Buat seleksi terlebih dahulu sebelum menambah peserta.</p>}
             </div>
 
             <F label="Nama Lengkap *">
@@ -216,7 +265,7 @@ export function CreateNoTestCandidateDialog({ open, onOpenChange, onCreated }: P
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
               Batal
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || !form.selection_id}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Simpan Peserta
             </Button>

@@ -4,6 +4,8 @@ import {
   getDb,
   getLocalSession,
   isAdminRole,
+  listActiveSelectionsLocal,
+  listSelectionsLocal,
   nowIso,
   requireLocalSession,
   saveDb,
@@ -28,11 +30,25 @@ export const isLocalStorageMode = () => isLocalMode;
 
 export async function listSelections() {
   if (isLocalStorageMode()) {
-    const db = getDb() as any;
-    return [...(db.selections ?? [])].sort((a: any, b: any) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+    return listSelectionsLocal();
   }
 
   const { data, error } = await supabase.from("selections").select("*").order("is_default", { ascending: false }).order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function listActiveSelections() {
+  if (isLocalStorageMode()) {
+    return listActiveSelectionsLocal();
+  }
+
+  const { data, error } = await supabase
+    .from("selections")
+    .select("*")
+    .in("status", ["Aktif", "active"])
+    .order("is_default", { ascending: false })
+    .order("created_at", { ascending: false });
   if (error) throw error;
   return data ?? [];
 }

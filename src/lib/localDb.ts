@@ -50,6 +50,24 @@ export function deleteRecord(collectionName: keyof LocalDb, id: string) { const 
 export function findRecordById(collectionName: keyof LocalDb, id: string) { return getCollection(collectionName).find((r: any) => r.id === id); }
 export function queryRecords(collectionName: keyof LocalDb, filterFn: (r: any) => boolean) { return getCollection(collectionName).filter(filterFn); }
 
+export function listSelectionsLocal() {
+  const db = getDb() as any;
+  return [...(db.selections ?? [])]
+    .filter((selection: any) => (selection.status ?? "").toLowerCase() !== "deleted")
+    .sort((a: any, b: any) => {
+      const nameA = a.selection_name ?? a.name ?? "";
+      const nameB = b.selection_name ?? b.name ?? "";
+      return String(nameA).localeCompare(String(nameB), "id", { sensitivity: "base" });
+    });
+}
+
+export function listActiveSelectionsLocal() {
+  return listSelectionsLocal().filter((selection: any) => {
+    const normalized = (selection.status ?? "Aktif").toLowerCase();
+    return normalized === "aktif" || normalized === "active";
+  });
+}
+
 export function normalizeSectionKey(sectionKey?: string | null) { const key = (sectionKey ?? "").toLowerCase(); const map: Record<string, string> = { ent: "tht", tht_subtim: "tht", mata_lihat: "mata_visus", mata_vision: "mata_visus", vision: "mata_visus", visus: "mata_visus", surgery: "bedah", bedah_subtim: "bedah", neuro: "neurologi", neurology: "neurologi", neurologi_subtim: "neurologi", exam_neurology: "neurologi", lab: "laboratorium", laboratory: "laboratorium", exam_laboratory: "laboratorium", keswa: "jiwa_keswa", psikiatri: "jiwa_keswa", psychiatry: "jiwa_keswa", status_psikiatri: "jiwa_keswa", exam_psychiatry: "jiwa_keswa", mental_health: "jiwa_keswa", exam_mental_health: "jiwa_keswa", radiology: "rontgen", radiologi: "rontgen", cardiology: "ekg", kardiologi: "ekg" }; return map[key] ?? key; }
 export function normalizeSectionStatus(status?: string | null) { const s = (status ?? "").toLowerCase(); if (s === "submitted") return "Submitted"; if (s === "approved") return "Approved"; if (s === "locked") return "Locked"; if (s === "revision") return "Revision"; if (s === "optional") return "Optional"; return "Draft"; }
 export function isSectionCompleted(status?: string | null) { return ["Submitted", "Approved", "Locked"].includes(normalizeSectionStatus(status)); }
