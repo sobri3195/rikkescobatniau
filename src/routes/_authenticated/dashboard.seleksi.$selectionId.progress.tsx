@@ -9,6 +9,7 @@ import { ArrowLeft, RefreshCw, AlertCircle, Search, RotateCcw } from "lucide-rea
 import { NoTestBadge } from "@/components/app/NoTestBadge";
 import { getDb, LOCAL_SESSION_KEY, nowIso } from "@/lib/localDb";
 import { toast } from "sonner";
+import { buildParticipantRowLocal } from "@/lib/services/candidateService";
 
 export const Route = createFileRoute("/_authenticated/dashboard/seleksi/$selectionId/progress")({ component: SelectionParticipantsProgress });
 
@@ -54,12 +55,13 @@ function getParticipantsBySelectionLocal(selectionId: string): Participant[] {
   if (!sel) return [];
   const candidates = db.candidates.filter((c: any) => c.selection_id === selectionId);
   return candidates.map((c: any) => {
-    const exam = db.exams.find((e: any) => e.candidate_id === c.id && e.selection_id === selectionId) ?? null;
+    const participant = buildParticipantRowLocal(c, db);
+    const exam = participant.exam ?? null;
     const missing = getMissingIssuesLocal(c, exam, db);
     return {
-      candidate_id: c.id, exam_id: exam?.id ?? null, selection_id: selectionId, full_name: c.full_name ?? "-", nrp: c.nrp_nip ?? null,
+      candidate_id: c.id, exam_id: participant.exam_id ?? null, selection_id: selectionId, full_name: c.full_name ?? "-", nrp: c.nrp_nip ?? null,
       rank: c.rank ?? null, unit: c.unit_position ?? null, test_number: c.test_number ?? null, temporary_id: c.temporary_id ?? null,
-      pok_korp: c.pok_group ?? null, class_group: c.class_group ?? null, selection_name: sel.name ?? "-", hari_h_stage: exam?.hari_h_stage ?? null,
+      pok_korp: c.pok_group ?? null, class_group: c.class_group ?? null, selection_name: sel.name ?? "-", hari_h_stage: participant.hari_h_stage ?? null,
       exam_status: exam?.exam_status ?? "Draft", progress_percentage: Number(exam?.progress_percentage ?? 0),
       progress_completed_count: Number(exam?.progress_completed_count ?? 0), progress_total_count: Number(exam?.progress_total_count ?? 0),
       missing_issues: missing, radiology_status: exam?.radiology_initial_status ?? "Draft", ekg_status: exam?.ekg_initial_status ?? "Draft", created_at: c.created_at ?? "",
