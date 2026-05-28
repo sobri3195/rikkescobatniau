@@ -6,6 +6,7 @@ import {
   requireLocalSession,
   setDb,
 } from "@/lib/localDb";
+import { refreshAllDerivedDataLocal, syncSelectionRelationsLocal } from "@/lib/services/syncService";
 
 export function listSelectionsLocal() {
   const db = getDb() as any;
@@ -68,7 +69,7 @@ export function createSelectionLocal(input: any) {
       id: generateId("audit"),
       user_id: session.user_id,
       role: session.role,
-      action: "create_selection_local",
+      action: "create_selection",
       module: "Master Seleksi",
       selection_id: selection.id,
       before_data_json: null,
@@ -78,6 +79,8 @@ export function createSelectionLocal(input: any) {
   ];
 
   setDb(db);
+  syncSelectionRelationsLocal(selection.id);
+  refreshAllDerivedDataLocal();
   return selection;
 }
 
@@ -104,7 +107,7 @@ export function updateSelectionLocal(selectionId: string, patch: any) {
       id: generateId("audit"),
       user_id: session?.user_id ?? "local_user",
       role: session?.role ?? "unknown",
-      action: "update_selection_local",
+      action: "update_selection",
       module: "Master Seleksi",
       selection_id: selectionId,
       before_data_json: before,
@@ -114,6 +117,8 @@ export function updateSelectionLocal(selectionId: string, patch: any) {
   ];
 
   setDb(db);
+  syncSelectionRelationsLocal(selectionId);
+  refreshAllDerivedDataLocal();
   return updated;
 }
 
@@ -145,6 +150,8 @@ export function setDefaultSelectionLocal(selectionId: string) {
   };
 
   setDb(db);
+  syncSelectionRelationsLocal(selectionId);
+  refreshAllDerivedDataLocal();
   return selectionId;
 }
 

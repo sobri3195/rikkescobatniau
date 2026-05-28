@@ -15,6 +15,7 @@ import { createCandidateLocal, findDuplicateTestNumberLocal, listCandidatesLocal
 import { ensureExamForCandidateLocal, getExamByCandidateIdLocal } from "@/lib/services/examService";
 import { listActiveSelections, createSelection } from "@/lib/selectionService";
 import { getDb, saveDb } from "@/lib/localDb";
+import { subscribeLocalDbChanged } from "@/lib/services/syncService";
 
 export const Route = createFileRoute("/_authenticated/candidates")({
   component: CandidatesPage,
@@ -51,6 +52,7 @@ function CandidatesPage() {
   }
   useEffect(() => {
     load();
+    return subscribeLocalDbChanged(() => { void load(); });
   }, []);
 
   const filtered = cands.filter((c) =>

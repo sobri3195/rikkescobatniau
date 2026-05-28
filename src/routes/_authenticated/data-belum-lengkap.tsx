@@ -12,6 +12,7 @@ import { buildParticipantRowLocal } from "@/lib/services/participantRowService";
 import { getDb } from "@/lib/localDb";
 import { logAudit } from "@/lib/audit";
 import { QuickSupportingModal } from "@/components/hari-h/QuickSupportingModal";
+import { subscribeLocalDbChanged } from "@/lib/services/syncService";
 
 export const Route = createFileRoute("/_authenticated/data-belum-lengkap")({
   component: IncompletePage,
@@ -134,6 +135,7 @@ function IncompletePage() {
   useEffect(() => {
     load();
     logAudit({ action: "open_incomplete_data_page", module: "Data Belum Lengkap" });
+    return subscribeLocalDbChanged(() => { void load(); });
   }, []);
 
   const filtered = useMemo(() => {

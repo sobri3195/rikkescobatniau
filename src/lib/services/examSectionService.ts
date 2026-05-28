@@ -8,6 +8,7 @@ import {
 } from "@/lib/localDb";
 import { addAuditLogLocal } from "@/lib/services/auditService";
 import { recalcExamProgressLocal } from "@/lib/services/examService";
+import { recalculateHariHStageLocal, refreshAllDerivedDataLocal, syncExamRelationsLocal } from "@/lib/services/syncService";
 
 const DEFAULT_SECTIONS = DEFAULT_EXAM_SECTIONS;
 
@@ -233,7 +234,8 @@ export function persistExamSectionLocal(
   exam.progress_percentage = sections.length ? Math.round((completed / sections.length) * 100) : 0;
   exam.updated_at = now;
   saveDb(db);
-  return row;
+  syncExamRelationsLocal(examId);
+  refreshAllDerivedDataLocal();
 }
 
 export function updateSectionLocal(examId: string, sectionKey: string, patch: any) {
@@ -245,11 +247,17 @@ export function updateSectionLocal(examId: string, sectionKey: string, patch: an
   Object.assign(row, patch, { updated_at: nowIso() });
   saveDb(db);
   recalcExamProgressLocal(examId);
+  recalculateHariHStageLocal(examId);
+  syncExamRelationsLocal(examId);
+  refreshAllDerivedDataLocal();
+  addAuditLogLocal(patch?.section_status === "Submitted" ? "submit_section" : "save_draft_section", { exam_id: examId, section_key: sectionKey });
   return row;
 }
 
 export function submitSectionLocal(examId: string, sectionKey: string, formData: any) {
-  return persistExamSectionLocal(examId, sectionKey, formData, "Submitted");
+  const row = updateSectionLocal(examId, sectionKey, { section_status: "Submitted", form_data_json: formData, submitted_at: nowIso() });
+  addAuditLogLocal("submit_section", { exam_id: examId, section_key: sectionKey });
+  return row;
 }
 
 export function returnSectionToDraftLocal(examId: string, sectionKey: string) {
@@ -258,7 +266,7 @@ export function returnSectionToDraftLocal(examId: string, sectionKey: string) {
     submitted_at: null,
     submitted_by: null,
   });
-  addAuditLogLocal("return_section_to_draft_local", { exam_id: examId, section_key: sectionKey });
+  addAuditLogLocal("save_draft_section", { exam_id: examId, section_key: sectionKey });
   return row;
 }
 

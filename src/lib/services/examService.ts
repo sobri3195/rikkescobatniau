@@ -1,5 +1,6 @@
 import { generateId, getDb, nowIso, saveDb } from "@/lib/localDb";
 import { createDefaultExamSectionsLocal } from "@/lib/services/examSectionService";
+import { recalculateExamProgressLocal, refreshAllDerivedDataLocal, syncExamRelationsLocal } from "@/lib/services/syncService";
 
 export function createExamForCandidateLocal(candidate: any) {
   const db = getDb() as any;
@@ -9,7 +10,7 @@ export function createExamForCandidateLocal(candidate: any) {
     exam = { id: generateId("exam"), candidate_id: candidate.id, selection_id: candidate.selection_id, exam_status: "In Progress", hari_h_stage: "Menunggu Rontgen & EKG", ekg_initial_status: "Belum", radiology_initial_status: "Belum", progress_percentage: 0, progress_completed_count: 0, progress_total_count: 0, is_deleted: false, created_at: now, updated_at: now };
     db.exams = db.exams ?? [];
     db.exams.push(exam);
-    saveDb(db);
+    saveDb(db); syncExamRelationsLocal(exam.id); refreshAllDerivedDataLocal();
   }
   createDefaultExamSectionsLocal(exam.id, candidate.id, candidate.selection_id);
   return exam;
@@ -19,8 +20,8 @@ export function getExamByCandidateIdLocal(candidateId: string) { return (getDb()
 export function listActiveExamsLocal() { return ((getDb() as any).exams ?? []).filter((e: any) => !e.is_deleted); }
 export function getExamDetailLocal(examId: string) { return ((getDb() as any).exams ?? []).find((e: any) => e.id === examId) ?? null; }
 export function getExamByIdLocal(examId: string) { return getExamDetailLocal(examId); }
-export function updateExamLocal(examId: string, patch: any) { const db = getDb() as any; const ex = (db.exams ?? []).find((e: any) => e.id === examId); if (!ex) return null; Object.assign(ex, patch, { updated_at: nowIso() }); saveDb(db); return ex; }
-export function recalcExamProgressLocal(examId: string) { const db = getDb() as any; const exam = (db.exams ?? []).find((e: any) => e.id === examId); if (!exam) return; const sections = (db.exam_sections ?? []).filter((s: any) => s.exam_id === examId && s.is_required !== false); const completed = sections.filter((s: any) => ["Submitted", "Approved", "Locked"].includes(s.section_status)).length; exam.progress_total_count = sections.length; exam.progress_completed_count = completed; exam.progress_percentage = sections.length ? Math.round((completed / sections.length) * 100) : 0; exam.updated_at = nowIso(); saveDb(db); }
+export function updateExamLocal(examId: string, patch: any) { const db = getDb() as any; const ex = (db.exams ?? []).find((e: any) => e.id === examId); if (!ex) return null; Object.assign(ex, patch, { updated_at: nowIso() }); saveDb(db); syncExamRelationsLocal(examId); refreshAllDerivedDataLocal(); return ex; }
+export function recalcExamProgressLocal(examId: string) { return recalculateExamProgressLocal(examId); }
 
 
 export function ensureExamForCandidateLocal(candidateId: string) {
@@ -47,7 +48,7 @@ export function ensureExamForCandidateLocal(candidateId: string) {
       updated_at: now,
     };
     db.exams = [...(db.exams ?? []), exam];
-    saveDb(db);
+    saveDb(db); syncExamRelationsLocal(exam.id); refreshAllDerivedDataLocal();
   }
 
   createDefaultExamSectionsLocal(exam.id, candidate.id, candidate.selection_id);

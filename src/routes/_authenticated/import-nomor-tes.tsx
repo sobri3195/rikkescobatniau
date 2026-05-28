@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { listActiveSelections } from "@/lib/selectionService";
 import { useAuth } from "@/lib/use-auth";
 import { logAudit } from "@/lib/audit";
+import { refreshAllDerivedDataLocal, syncAllLocalRelations } from "@/lib/services/syncService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -505,63 +506,64 @@ function ImportNomorTesPage() {
           });
         } catch (error) {
           errors += 1;
-          const rowDb = getDb() as any;
-          rowDb.test_number_import_rows = rowDb.test_number_import_rows ?? [];
-          rowDb.test_number_import_rows.push({
-            id: generateId("tnir"),
-            session_id,
-            source_row_number: r.source_row_number,
-            candidate_id: r.candidate.id,
-            exam_id: r.candidate.exam_id,
-            old_test_number: r.candidate.test_number,
-            new_test_number: r.kes,
-            match_confidence: r.confidence,
-            row_status: "error",
-            raw_data_json: r,
-            mapped_data_json: patch,
-            error_messages_json: { error: error instanceof Error ? error.message : "Gagal update" },
-            created_at: nowIso(),
-          });
-          saveDb(rowDb);
+          await supabase.from("test_number_import_rows" as never).insert({
+            session_id, source_row_number: r.source_row_number, candidate_id: r.candidate.id, exam_id: r.candidate.exam_id,
+            old_test_number: r.candidate.test_number, new_test_number: r.kes,
+            match_confidence: r.confidence, row_status: "error",
+            raw_data_json: r as never, mapped_data_json: patch as never,
+            error_messages_json: { error: upd.error.message } as never,
+          } as never);
+          await logAudit({ action: "import_nomor_tes_row_failed", module: "Import Nomor Tes", candidate_id: r.candidate.id, before: before as never, after: { error: upd.error.message } as never });
+          continue;
+        }
+        updated += 1;
+        await supabase.from("test_number_import_rows" as never).insert({
+          session_id, source_row_number: r.source_row_number, candidate_id: r.candidate.id, exam_id: r.candidate.exam_id,
+          old_test_number: r.candidate.test_number, new_test_number: r.kes,
+          match_confidence: r.confidence, row_status: "updated",
+          raw_data_json: r as never, mapped_data_json: patch as never,
+        } as never);
+        await logAudit({
+          action: "update_candidate_nomor_tes", module: "Import Nomor Tes",
+          candidate_id: r.candidate.id, record_id: r.candidate.id,
+          before: before as never,
+          after: {
+            new_test_number: r.kes, new_test_number_status: "assigned",
+          no_test_missing: false,
+            temporary_id: r.candidate.temporary_id, hari_h_stage: r.candidate.hari_h_stage,
+            radiology_initial_status: r.candidate.radiology_initial_status,
+            ekg_initial_status: r.candidate.ekg_initial_status,
+            progress_percentage: r.candidate.progress_percentage,
+          } as never,
+        });
+        // Recompute progress (preserves Rontgen/EKG status)
+        if (r.candidate.exam_id) {
+          await supabase.rpc("compute_exam_progress" as never, { p_exam_id: r.candidate.exam_id } as never);
+          await logAudit({ action: "recalculate_progress_after_nomor_tes_import", module: "Import Nomor Tes", candidate_id: r.candidate.id });
+          await logAudit({ action: "preserve_existing_radiology_ekg_data", module: "Import Nomor Tes", candidate_id: r.candidate.id });
         }
       }
 
       // 3) Create missing candidates (optional)
       for (const r of toCreate) {
-        try {
-          const candidate = createCandidateLocal({
-            selection_id: selId,
-            full_name: r.full_name,
-            birth_place: r.birth_place,
-            birth_date: r.birth_date,
-            test_number: r.kes,
-            test_number_status: "assigned",
-            no_test_missing: false,
-            test_number_assigned_at: new Date().toISOString(),
-            test_number_notes: `Import KES (created) sesi ${session_id}`,
-            serial_number: r.no ?? null,
-            sort_order: r.no ?? null,
-            bag_number: r.bag ?? null,
-            class_group: r.kls ?? null,
-            pnd_code: r.pnd ?? null,
-            registration_notes: r.ket ?? null,
-          });
-          updated += 1;
-          const rowDb = getDb() as any;
-          rowDb.test_number_import_rows = rowDb.test_number_import_rows ?? [];
-          rowDb.test_number_import_rows.push({
-            id: generateId("tnir"),
-            session_id,
-            source_row_number: r.source_row_number,
-            candidate_id: candidate.id,
-            new_test_number: r.kes,
-            match_confidence: "not_found",
-            row_status: "created",
-            raw_data_json: r,
-            created_at: nowIso(),
-          });
-          saveDb(rowDb);
-        } catch (error) {
+        const ins = await supabase.from("candidates").insert({
+          selection_id: selId,
+          full_name: r.full_name,
+          birth_place: r.birth_place,
+          birth_date: r.birth_date,
+          test_number: r.kes,
+          test_number_status: "assigned",
+          no_test_missing: false,
+          test_number_assigned_at: new Date().toISOString(),
+          test_number_notes: `Import KES (created) sesi ${session_id}`,
+          serial_number: r.no ?? null,
+          sort_order: r.no ?? null,
+          bag_number: r.bag ?? null,
+          class_group: r.kls ?? null,
+          pnd_code: r.pnd ?? null,
+          registration_notes: r.ket ?? null,
+        } as never).select("id").single();
+        if (ins.error) {
           errors += 1;
           const rowDb = getDb() as any;
           rowDb.test_number_import_rows = rowDb.test_number_import_rows ?? [];
@@ -597,12 +599,15 @@ function ImportNomorTesPage() {
         });
       saveDb(doneDb);
 
-      await logAudit({
-        action: "import_nomor_tes_completed",
-        module: "Import Nomor Tes",
-        record_id: session_id,
-        after: { updated, errors, skipped },
-      });
+      await supabase.from("test_number_import_sessions" as never).update({
+        updated_rows: updated, error_rows: errors, skipped_rows: skipped,
+        status: errors > 0 ? "Completed with Errors" : "Completed",
+        completed_at: new Date().toISOString(),
+      } as never).eq("id", session_id);
+
+      await logAudit({ action: "import_nomor_tes", module: "Import Nomor Tes", record_id: session_id, after: { updated, errors, skipped } });
+      syncAllLocalRelations({ auditAction: "import_nomor_tes", module: "Import Nomor Tes" });
+      refreshAllDerivedDataLocal();
       setResult({ session_id, updated, skipped, errors });
       toast.success(`Import selesai: ${updated} update, ${errors} error.`);
       setConfirmOpen(false);

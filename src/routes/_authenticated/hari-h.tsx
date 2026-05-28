@@ -13,6 +13,7 @@ import { NoTestBadge } from "@/components/app/NoTestBadge";
 import { CandidateProgressPopover } from "@/components/candidate/CandidateProgressPopover";
 import { buildHariHQueueRowsLocal } from "@/lib/services/hariHService";
 import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
+import { subscribeLocalDbChanged } from "@/lib/services/syncService";
 
 export const Route = createFileRoute("/_authenticated/hari-h")({
   component: HariHQueuePageRoute,
@@ -58,7 +59,7 @@ function HariHQueuePage() {
     setRows(mapped);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); return subscribeLocalDbChanged(() => { void load(); }); }, []);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
