@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { createSelection, listActiveSelections } from "@/lib/selectionService";
 import { logAudit } from "@/lib/audit";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -48,7 +49,7 @@ export function BulkImportXlsxDialog({
 
   useEffect(() => {
     if (!open) return;
-    supabase.from("selections").select("id,name").order("created_at", { ascending: false }).then(({ data }) => {
+    listActiveSelections().then((data) => {
       setSelections((data ?? []) as any);
     });
     logAudit({ action: "open_bulk_import_xlsx", module: "Bulk Import Peserta" }).catch(() => {});
@@ -112,12 +113,8 @@ export function BulkImportXlsxDialog({
   async function ensureSelection(): Promise<string | null> {
     if (createNew) {
       if (!newSelectionName.trim()) { toast.error("Nama seleksi baru wajib"); return null; }
-      const { data: u } = await supabase.auth.getUser();
-      const { data, error } = await supabase.from("selections")
-        .insert({ name: newSelectionName.trim(), created_by: u.user?.id } as any)
-        .select("id").single();
-      if (error) { toast.error("Gagal buat seleksi: " + error.message); return null; }
-      return (data as any).id;
+      const created = await createSelection({ name: newSelectionName.trim(), status: "active" } as any);
+      return (created as any).id;
     }
     if (!selectionId) { toast.error("Pilih seleksi tujuan"); return null; }
     return selectionId;

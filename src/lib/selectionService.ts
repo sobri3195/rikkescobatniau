@@ -9,8 +9,8 @@ import {
 
 export type SelectionInput = {
   name: string;
-  year_label: string;
-  participant_label: string;
+  year_label?: string;
+  participant_label?: string;
   institution_header_line_1?: string;
   institution_header_line_2?: string;
   report_title?: string;
@@ -19,6 +19,7 @@ export type SelectionInput = {
   start_date?: string | null;
   end_date?: string | null;
   status?: string;
+  [key: string]: unknown;
 };
 
 export const isLocalStorageMode = () => true;
