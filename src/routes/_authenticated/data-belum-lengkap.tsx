@@ -8,6 +8,8 @@ import { Activity, Radio, ExternalLink, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/use-auth";
 import { listActiveExamsLocal } from "@/lib/services/examService";
+import { buildParticipantRowLocal } from "@/lib/services/participantRowService";
+import { getDb } from "@/lib/localDb";
 import { logAudit } from "@/lib/audit";
 import { QuickSupportingModal } from "@/components/hari-h/QuickSupportingModal";
 
@@ -51,6 +53,7 @@ const ISSUE_TO_FOCUS: Record<IssueKey, string> = {
 type Row = {
   exam_id: string;
   candidate_id: string;
+  selection_id: string | null;
   full_name: string;
   test_number: string | null;
   temporary_id: string | null;
@@ -78,9 +81,12 @@ function IncompletePage() {
   const [modal, setModal] = useState<{ mode: "ekg" | "radiology"; examId: string; candidateId: string } | null>(null);
 
   async function load() {
+    const db = getDb() as any;
     const data = listActiveExamsLocal();
     const mapped: Row[] = (data ?? []).map((r: any) => {
-      const cand = r.candidates;
+      const candRaw = (db.candidates ?? []).find((c: any) => c.id === r.candidate_id);
+      const participant = candRaw ? buildParticipantRowLocal(candRaw, db) : null;
+      const cand = participant?.candidate ?? candRaw;
       const issues: IssueKey[] = [];
       const tn = (cand?.test_number ?? "").trim();
       if (!tn || tn.startsWith("TMP-")) issues.push("no_test_kosong");
@@ -88,7 +94,7 @@ function IncompletePage() {
       if (!DONE.includes(r.ekg_initial_status)) issues.push("ekg_belum");
       if (!DONE.includes(r.radiology_initial_status)) issues.push("rontgen_belum");
       if (r.bypass_initial_at && !r.bypass_initial_reviewed_at) issues.push("bypass_belum_review");
-      const mhfArr = Array.isArray(r.medical_history_forms) ? r.medical_history_forms : (r.medical_history_forms ? [r.medical_history_forms] : []);
+      const mhfArr = (db.medical_history_forms ?? []).filter((item: any) => item.exam_id === r.id);
       const mhf = mhfArr[0];
       const wf = mhf?.anamnesis_workflow_status ?? "Draft Peserta";
       const patientSigned = !!(mhf?.patient_signature_url || mhf?.candidate_signature_url);
@@ -107,18 +113,19 @@ function IncompletePage() {
       return {
         exam_id: r.id,
         candidate_id: r.candidate_id,
-        full_name: cand?.full_name ?? "-",
-        test_number: cand?.test_number ?? null,
-        temporary_id: cand?.temporary_id ?? null,
-        nrp_nip: cand?.nrp_nip ?? null,
-        rank: cand?.rank ?? null,
-        unit_position: cand?.unit_position ?? null,
+        full_name: participant?.display_name ?? cand?.full_name ?? cand?.name ?? "-",
+        test_number: participant?.test_number ?? cand?.test_number ?? null,
+        temporary_id: participant?.temporary_id ?? cand?.temporary_id ?? null,
+        nrp_nip: participant?.nrp_nip ?? cand?.nrp_nip ?? null,
+        rank: participant?.rank ?? cand?.rank ?? null,
+        unit_position: participant?.unit_position ?? cand?.unit_position ?? null,
         hari_h_stage: r.hari_h_stage ?? "Registrasi Awal",
         ekg_initial_status: r.ekg_initial_status ?? "Belum Diisi",
         radiology_initial_status: r.radiology_initial_status ?? "Belum Diisi",
         bypass_initial_at: r.bypass_initial_at,
         bypass_initial_reviewed_at: r.bypass_initial_reviewed_at,
         issues,
+        selection_id: participant?.selection_id ?? cand?.selection_id ?? null,
       };
     }).filter((r) => r.issues.length > 0);
     setRows(mapped);

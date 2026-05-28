@@ -1,6 +1,7 @@
 import { generateId, getDb, getLocalSession, nowIso, saveDb } from "@/lib/localDb";
 import { addAuditLogLocal } from "@/lib/services/auditService";
 import { createExamForCandidateLocal, ensureExamForCandidateLocal } from "@/lib/services/examService";
+import { buildParticipantRowLocal } from "@/lib/services/participantRowService";
 
 function generateTemporaryId(db: any) {
   const d = new Date();
@@ -11,35 +12,6 @@ function generateTemporaryId(db: any) {
 
 export function listCandidatesLocal() { return (getDb() as any).candidates ?? []; }
 export function listCandidatesBySelectionLocal(selectionId: string) { return listCandidatesLocal().filter((c: any) => c.selection_id === selectionId); }
-
-export function buildParticipantRowLocal(candidate: any, db: any) {
-  const exam = (db.exams ?? []).find((item: any) => item.candidate_id === candidate.id && !item.is_deleted);
-  const selection = (db.selections ?? []).find((item: any) => item.id === candidate.selection_id);
-  const sections = (db.exam_sections ?? []).filter((section: any) => section.exam_id === exam?.id);
-
-  return {
-    ...candidate,
-    candidate_id: candidate.id,
-    exam_id: exam?.id ?? null,
-    selection_id: candidate.selection_id,
-    full_name: candidate.full_name ?? candidate.name ?? "-",
-    display_identifier:
-      candidate.test_number && String(candidate.test_number).trim() !== ""
-        ? candidate.test_number
-        : candidate.temporary_id ?? "-",
-    selection_name: selection?.selection_name ?? selection?.name ?? "-",
-    exam_status: exam?.exam_status ?? "Belum Ada Exam",
-    hari_h_stage: exam?.hari_h_stage ?? "Registrasi Awal",
-    ekg_initial_status: exam?.ekg_initial_status ?? "Belum",
-    radiology_initial_status: exam?.radiology_initial_status ?? "Belum",
-    progress_percentage: exam?.progress_percentage ?? 0,
-    progress_completed_count: exam?.progress_completed_count ?? 0,
-    progress_total_count: exam?.progress_total_count ?? sections.length,
-    sections,
-    exam,
-    selection,
-  };
-}
 
 export function listCandidatesWithoutTestNumberLocal(filters: any = {}) {
   const db = getDb() as any;

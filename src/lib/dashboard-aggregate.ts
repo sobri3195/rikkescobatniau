@@ -1,5 +1,9 @@
 import type { SelectionCardData } from "@/components/selection/SelectionCard";
 import { exportLocalDb, getDb, migrateLocalDb, nowIso, repairLocalDbRelations, saveDb } from "@/lib/localDb";
+import { listActiveSelectionsLocal } from "@/lib/services/selectionService";
+import { listCandidatesLocal } from "@/lib/services/candidateService";
+import { listActiveExamsLocal } from "@/lib/services/examService";
+import { buildParticipantRowLocal } from "@/lib/services/participantRowService";
 
 export type DashboardSummary = {
   totalSelectionsActive: number;
@@ -57,14 +61,15 @@ export function loadDashboardLocalDb() {
   const db = getDb() as any;
 
   const selectionsAll = (db.selections ?? []).filter((s: any) => !s?.is_deleted && String(s?.status ?? "").toLowerCase() !== "deleted");
-  const selectionsActive = selectionsAll.filter(isSelectionActive).map(normalizeSelection).filter((s) => !!s.id && !!s.name);
+  const selectionsActive = listActiveSelectionsLocal().map(normalizeSelection).filter((s) => !!s.id && !!s.name);
 
-  const activeCandidates = (db.candidates ?? []).filter((c: any) => !c?.is_deleted && !c?.deleted_at);
-  const activeExams = (db.exams ?? []).filter((e: any) => !e?.is_deleted && !e?.deleted_at);
+  const activeCandidates = listCandidatesLocal().filter((c: any) => !c?.is_deleted && !c?.deleted_at);
+  const activeExams = listActiveExamsLocal().filter((e: any) => !e?.deleted_at);
+  const participantRows = activeCandidates.map((candidate: any) => buildParticipantRowLocal(candidate, db));
 
   const cards = selectionsActive.map((selection) => {
-    const selectionCandidates = activeCandidates.filter((candidate: any) => candidate.selection_id === selection.id);
-    const selectionExams = activeExams.filter((exam: any) => selectionCandidates.some((candidate: any) => candidate.id === exam.candidate_id));
+    const selectionCandidates = participantRows.filter((candidate: any) => candidate.selection_id === selection.id);
+    const selectionExams = selectionCandidates.map((row: any) => row.exam).filter(Boolean);
     const total = selectionCandidates.length;
     const progressSum = selectionExams.reduce((acc: number, exam: any) => acc + Number(exam.progress_percentage ?? 0), 0);
     const finalized = selectionExams.filter((exam: any) => String(exam.exam_status ?? "") === "Finalized").length;
