@@ -49,7 +49,42 @@ export function migrateLocalDb(input?: any): LocalDb {
   for (const k of Object.keys(base)) if (db[k] === undefined) db[k] = base[k];
   db.settings = { ...base.settings, ...(db.settings ?? {}) };
   db.candidates = (db.candidates ?? []).map((c: any) => ({ ...c, id: c.id ?? generateId("cand"), is_deleted: c.is_deleted ?? false, test_number: c.test_number ?? "", no_test_missing: c.no_test_missing ?? !String(c.test_number ?? "").trim(), test_number_status: c.test_number_status ?? (String(c.test_number ?? "").trim() ? "assigned" : "pending"), temporary_id: c.temporary_id || (String(c.test_number ?? "").trim() ? "" : `TMP-${new Date().toISOString().slice(0,10).replace(/-/g,"")}-${String(Math.floor(Math.random()*9999)+1).padStart(4,"0")}`) }));
+  repairLocalDbRelations(db);
   saveDb(db);
+  return db;
+}
+
+
+
+export function repairLocalDbRelations(inputDb?: any) {
+  const db: any = inputDb ?? getDb();
+  const now = nowIso();
+  db.candidates = db.candidates ?? [];
+  db.exams = db.exams ?? [];
+  db.exam_sections = db.exam_sections ?? [];
+
+  for (const candidate of db.candidates) {
+    if (candidate.is_deleted) continue;
+    if (!candidate.selection_id && db.settings?.active_selection_id) {
+      candidate.selection_id = db.settings.active_selection_id;
+      candidate.updated_at = now;
+    }
+    const testNumber = String(candidate.test_number ?? "").trim();
+    if (!testNumber && !String(candidate.temporary_id ?? "").trim()) {
+      candidate.temporary_id = `TMP-${new Date().toISOString().slice(0,10).replace(/-/g,"")}-${String(Math.floor(Math.random()*9999)+1).padStart(4,"0")}`;
+      candidate.updated_at = now;
+    }
+
+    let exam = db.exams.find((e: any) => e.candidate_id === candidate.id && !e.is_deleted);
+    if (!exam) {
+      exam = { id: generateId("exam"), candidate_id: candidate.id, selection_id: candidate.selection_id ?? null, exam_status: "In Progress", hari_h_stage: "Menunggu Rontgen & EKG", ekg_initial_status: "Belum", radiology_initial_status: "Belum", progress_percentage: 0, progress_completed_count: 0, progress_total_count: 0, is_deleted: false, created_at: now, updated_at: now };
+      db.exams.push(exam);
+    }
+    const sections = db.exam_sections.filter((x: any) => x.exam_id === exam.id);
+    if (sections.length === 0) {
+      for (const [k, label] of DEFAULT_SECTIONS) db.exam_sections.push({ id: generateId("section"), exam_id: exam.id, candidate_id: candidate.id, selection_id: candidate.selection_id ?? null, section_key: k, section_label: label, section_status: "Draft", is_required: k !== "neurologi", form_data_json: {}, created_at: now, updated_at: now });
+    }
+  }
   return db;
 }
 
