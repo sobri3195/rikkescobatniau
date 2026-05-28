@@ -146,7 +146,7 @@ function HariHQueuePage() {
                     <Radio className="h-3 w-3 mr-1" /> Rontgen
                   </Button>
                   <Button size="sm" variant="ghost" className="h-8 text-xs" asChild>
-                    <Link to="/rikkes/$id" params={{ id: r.exam_id }}>
+                    <Link to="/rikkes/$id" params={{ id: r.exam_id ?? r.candidate_id }} search={{ from: "hari-h", candidateId: r.candidate_id, selectionId: r.selection_id }}>
                       <ExternalLink className="h-3 w-3 mr-1" /> Detail
                     </Link>
                   </Button>
@@ -193,7 +193,7 @@ function HariHQueuePage() {
                         <Radio className="h-3 w-3 mr-1" /> Rontgen
                       </Button>
                       <Button size="sm" variant="ghost" className="h-7 text-[11px]" asChild>
-                        <Link to="/rikkes/$id" params={{ id: r.exam_id }}>
+                        <Link to="/rikkes/$id" params={{ id: r.exam_id ?? r.candidate_id }} search={{ from: "hari-h", candidateId: r.candidate_id, selectionId: r.selection_id }}>
                           <ExternalLink className="h-3 w-3 mr-1" /> Detail
                         </Link>
                       </Button>

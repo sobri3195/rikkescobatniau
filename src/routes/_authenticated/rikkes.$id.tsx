@@ -20,7 +20,7 @@ import { AttachmentsSheet } from "@/components/hari-h/AttachmentsSheet";
 import { BypassDialog } from "@/components/hari-h/BypassDialog";
 import { evaluateGate, loadHariHSettings, type HariHSettings } from "@/lib/hari-h-gating";
 import { syncGroupToRekap } from "@/lib/rekap-sync";
-import { getDb, getDisplayStatusLocal, normalizeSectionStatus, isSectionCompleted, syncNeurologiLabKeswaStatusLocal } from "@/lib/localDb";
+import { getDb, getDisplayStatusLocal, normalizeSectionStatus, isSectionCompleted, syncNeurologiLabKeswaStatusLocal, resolveParticipantDetailLocal, logAuditLocal, generateId, nowIso } from "@/lib/localDb";
 
 // Lazy-load heavy form components so initial detail render only ships the active section.
 const IdentitasAnamnesisForm = lazy(() => import("@/components/rikkes/IdentitasAnamnesisForm").then(m => ({ default: m.IdentitasAnamnesisForm })));
@@ -49,6 +49,7 @@ type Group = {
 
 function RikkesDetail() {
   const { id } = Route.useParams();
+  const search = Route.useSearch() as any;
   const navigate = useNavigate();
   const { roles } = useAuth();
   const [cand, setCand] = useState<any>(null);
@@ -79,39 +80,48 @@ function RikkesDetail() {
   const canEdit = !viewerOnly && (can.editMedical(roles) || can.editCandidate(roles));
 
   const load = useCallback(async () => {
-    // Phase 1 (header): fetch candidate + exam in parallel with minimal columns.
-    const t0 = performance.now();
-    if (import.meta.env.DEV) console.log("[perf] candidate_detail_fetch_start", id);
-    const [{ data: c }, { data: e }] = await Promise.all([
-      supabase
-        .from("candidates")
-        .select("id, full_name, nrp_nip, rank, unit_position, test_number, temporary_id, selection_id")
-        .eq("id", id)
-        .maybeSingle(),
-      supabase
-        .from("exams")
-        .select("id, selection_id, exam_status, bypass_initial_at, ekg_initial_status, radiology_initial_status, hari_h_stage")
-        .eq("candidate_id", id)
-        .maybeSingle(),
-    ]);
-    setCand(c ?? null);
-    setExam(e ?? null);
-    setLoading(false); // header + sidebar shell can render now
+    const resolved = resolveParticipantDetailLocal({
+      id,
+      candidateId: search?.candidateId,
+      selectionId: search?.selectionId,
+      temporaryId: search?.temporaryId,
+      testNumber: search?.testNumber,
+    });
+    setCand(resolved.candidate ?? null);
+    setExam(resolved.exam ?? null);
+    setGroups((resolved.sections ?? []).map((g: any) => ({
+      id: g.id,
+      group_key: g.section_key,
+      status: g.section_status,
+      form_data_json: g.form_data_json ?? {},
+      submitted_at: g.submitted_at ?? null,
+      return_reason: g.return_reason ?? null,
+    })));
+    setSettings(await loadHariHSettings(resolved.exam?.selection_id ?? search?.selectionId ?? null));
+    setLoading(false);
+    logAuditLocal(`detail_lookup_by_${resolved.source}`, {
+      candidate_id: resolved.candidate?.id ?? search?.candidateId ?? null,
+      exam_id: resolved.exam?.id ?? id ?? null,
+      selection_id: search?.selectionId ?? resolved.candidate?.selection_id ?? null,
+      route_params_json: { id, search },
+      lookup_result_json: { source: resolved.source, error: resolved.error },
+    });
+  }, [id, search]);
 
-    // Phase 2 (sidebar status + gating): fetch sections + settings in parallel.
-    if (e) {
-      const [groupsRes, settingsRes] = await Promise.all([
-        supabase
-          .from("rikkes_form_sections")
-          .select("id, group_key, status, form_data_json, submitted_at, return_reason")
-          .eq("exam_id", e.id),
-        loadHariHSettings(e.selection_id ?? null),
-      ]);
-      setGroups((groupsRes.data ?? []) as Group[]);
-      setSettings(settingsRes);
-    }
-    if (import.meta.env.DEV) console.log("[perf] candidate_detail_fetch_done", id, Math.round(performance.now() - t0), "ms");
-  }, [id]);
+  const createExamNow = useCallback(() => {
+    if (!cand) return;
+    const db = getDb();
+    const existing = db.exams.find((e: any) => e.candidate_id === cand.id);
+    if (existing) { navigate({ to: "/rikkes/$id", params: { id: existing.id }, search: { candidateId: cand.id, selectionId: cand.selection_id, from: "detail-fallback" } as any }); return; }
+    const now = nowIso();
+    const examId = generateId("exam");
+    db.exams.push({ id: examId, candidate_id: cand.id, selection_id: cand.selection_id, exam_status: "In Progress", hari_h_stage: "Menunggu Rontgen & EKG", progress_percentage: 0, progress_completed_count: 0, progress_total_count: 0, created_at: now, updated_at: now });
+    const defaultSections = ["identitas","anamnesis","pemeriksaan_umum","rontgen","ekg","tht","mata_visus","bedah","neurologi","laboratorium","jiwa_keswa","resume"];
+    for (const k of defaultSections) db.exam_sections.push({ id: generateId("section"), exam_id: examId, candidate_id: cand.id, section_key: k, section_label: k, section_status: "Draft", is_required: k !== "neurologi", form_data_json: {}, created_at: now, updated_at: now });
+    localStorage.setItem("rikkes_tni_au_local_db_v1", JSON.stringify(db));
+    logAuditLocal("create_exam_from_detail_fallback", { candidate_id: cand.id, exam_id: examId, selection_id: cand.selection_id, route_params_json: { id, search } });
+    navigate({ to: "/rikkes/$id", params: { id: examId }, search: { candidateId: cand.id, selectionId: cand.selection_id, from: "detail-fallback" } as any });
+  }, [cand, id, navigate, search]);
 
   useEffect(() => {
     load();
@@ -267,7 +277,10 @@ function RikkesDetail() {
     return <RikkesDetailSkeleton />;
   }
   if (!cand) {
-    return <div className="p-8 text-slate-500">Peserta tidak ditemukan.</div>;
+    return <div className="p-8 space-y-3"><div className="text-slate-700 font-semibold">Peserta tidak ditemukan</div><div className="text-slate-500 text-sm">Data peserta tidak dapat ditemukan berdasarkan ID yang dikirim dari halaman sebelumnya.</div><div className="text-xs text-slate-500">id={id} candidateId={String(search?.candidateId ?? "-")} selectionId={String(search?.selectionId ?? "-")}</div></div>;
+  }
+  if (cand && !exam) {
+    return <div className="p-8 space-y-3"><div className="text-slate-700 font-semibold">Data peserta ditemukan, tetapi data pemeriksaan belum dibuat.</div><Button onClick={createExamNow}>Buat Exam Sekarang</Button></div>;
   }
 
   const activeGroup = getGroup(active);
