@@ -1,6 +1,6 @@
 import { createServerFn } from "@/shims/tanstack-react-start";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { requireSupabaseAuth } from "@/lib/local-auth-middleware";
+import { supabaseAdmin } from "@/lib/local-supabase-shim.server";
 import { z } from "zod";
 
 const ALL_ROLES = [

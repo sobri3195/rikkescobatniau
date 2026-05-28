@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 import { computeBmi } from "@/lib/sections";
 
 export type ProgressItemStatus = "belum" | "berjalan" | "selesai" | "revised" | "finalized";

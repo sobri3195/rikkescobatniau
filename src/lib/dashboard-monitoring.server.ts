@@ -1,4 +1,4 @@
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { supabaseAdmin } from "@/lib/local-supabase-shim.server";
 import { computeBmi } from "@/lib/sections";
 import type { CandidateProgress, ProgressItem, ProgressItemStatus } from "@/lib/candidate-progress";
 

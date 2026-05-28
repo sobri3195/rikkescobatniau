@@ -1,6 +1,6 @@
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 
 type Att = { name?: string; path: string; type?: string };
 

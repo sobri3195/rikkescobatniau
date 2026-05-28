@@ -2,7 +2,7 @@
 // Murni administratif: tidak melakukan diagnosis, hanya menerjemahkan
 // klasifikasi yang sudah diinput dokter/petugas menjadi KESUM/KESWA/hasil akhir.
 
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 import { logAudit } from "@/lib/audit";
 import { SECTIONS } from "@/lib/sections";
 

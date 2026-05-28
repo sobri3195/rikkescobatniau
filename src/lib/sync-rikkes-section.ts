@@ -7,7 +7,7 @@
 //
 // Non-throwing: failures are logged but never block the primary submit.
 
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 
 export async function syncRikkesGroupStatus(args: {
   examId: string;

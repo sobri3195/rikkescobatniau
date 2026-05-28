@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 import { createSelection, listActiveSelections } from "@/lib/selectionService";
 import { logAudit } from "@/lib/audit";
 import { toast } from "sonner";

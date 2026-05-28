@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 import { listActiveSelections } from "@/lib/selectionService";
 import { useAuth } from "@/lib/use-auth";
 import { logAudit } from "@/lib/audit";

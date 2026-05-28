@@ -1,7 +1,7 @@
 // One-shot backfill: re-project every previously-submitted rikkes_form_sections
 // row into the legacy exam_sections / medical_summary tables used by Rekap
 // APLIKASI & Laporan Tahap. Safe to run multiple times (idempotent updates).
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 import { syncGroupToRekap } from "@/lib/rekap-sync";
 
 export type BackfillProgress = {

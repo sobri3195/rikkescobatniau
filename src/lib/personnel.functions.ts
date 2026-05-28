@@ -1,7 +1,7 @@
 import { createServerFn } from "@/shims/tanstack-react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { requireSupabaseAuth } from "@/lib/local-auth-middleware";
+import { supabaseAdmin } from "@/lib/local-supabase-shim.server";
 
 const STORAGE_BUCKETS = ["hari-h-attachments", "qa-evidence"] as const;
 

@@ -1,5 +1,5 @@
 import { createServerFn } from "@/shims/tanstack-react-start";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireSupabaseAuth } from "@/lib/local-auth-middleware";
 import { z } from "zod";
 import {
   assertCanViewDashboardProgress,

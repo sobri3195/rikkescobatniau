@@ -3,7 +3,7 @@
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 import { SECTIONS } from "@/lib/sections";
 
 type Selection = {

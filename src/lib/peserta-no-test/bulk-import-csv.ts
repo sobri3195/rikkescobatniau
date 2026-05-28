@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 import { logAudit } from "@/lib/audit";
 
 export type CsvRow = {

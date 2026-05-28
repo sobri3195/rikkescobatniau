@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/local-supabase-shim";
 import { downloadCandidateResumePdf, type ResumeSection } from "./candidate-resume-pdf";
 
 export async function downloadCandidateResumeById(candidateId: string): Promise<void> {
