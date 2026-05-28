@@ -5,10 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { logAudit } from "@/lib/audit";
+import { findDuplicateTestNumberLocal, updateCandidateLocal } from "@/lib/services/candidateService";
 
-type Target = { id: string; full_name: string; temporary_id: string | null; test_number: string | null };
+type Target = { id: string; full_name: string; temporary_id: string | null; test_number: string | null; selection_id: string };
 
 export function BulkAssignSeriesDialog({
   open, onOpenChange, targets, onDone,
@@ -58,12 +58,17 @@ export function BulkAssignSeriesDialog({
         toast.error(`Konfigurasi menghasilkan No Test duplikat: ${dupInSet[0]}`);
         setBusy(false); return;
       }
-      const { data: existing } = await supabase
-        .from("candidates")
-        .select("test_number,id")
-        .in("test_number", tns);
-      const conflictIds = new Set(updates.map((u) => u.id));
-      const conflicts = (existing ?? []).filter((r: any) => !conflictIds.has(r.id)).map((r: any) => r.test_number);
+      const conflicts: string[] = [];
+      for (const u of updates) {
+        const target = targets.find((t) => t.id === u.id);
+        if (!target) continue;
+        const duplicate = findDuplicateTestNumberLocal({
+          selectionId: target.selection_id,
+          testNumber: u.tn,
+          excludeCandidateId: u.id,
+        });
+        if (duplicate) conflicts.push(u.tn);
+      }
       if (conflicts.length) {
         toast.error(`Konflik dengan No Test yang sudah ada: ${conflicts.slice(0, 3).join(", ")}${conflicts.length > 3 ? "…" : ""}`);
         setBusy(false); return;
@@ -71,11 +76,8 @@ export function BulkAssignSeriesDialog({
 
       let ok = 0; let fail = 0;
       for (const u of updates) {
-        const { error } = await supabase
-          .from("candidates")
-          .update({ test_number: u.tn, test_number_status: "Final", test_number_assigned_at: new Date().toISOString() })
-          .eq("id", u.id);
-        if (error) { fail++; continue; }
+        try {
+          updateCandidateLocal(u.id, { test_number: u.tn, test_number_assigned_at: new Date().toISOString() });
         ok++;
         await logAudit({
           action: "bulk_assign_series",
@@ -83,7 +85,10 @@ export function BulkAssignSeriesDialog({
           record_id: u.id,
           candidate_id: u.id,
           after: { test_number: u.tn, prefix, suffix, padding: padNum, step: stepNum },
-        });
+          });
+        } catch {
+          fail++;
+        }
       }
       toast.success(`${ok} No Test berhasil di-assign${fail ? `, ${fail} gagal` : ""}`);
       await onDone();

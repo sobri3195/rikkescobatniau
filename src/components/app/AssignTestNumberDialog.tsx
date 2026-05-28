@@ -7,9 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { logAudit } from "@/lib/audit";
+import { findDuplicateTestNumberLocal, updateCandidateLocal } from "@/lib/services/candidateService";
 
 type Candidate = {
   id: string;
@@ -48,22 +48,15 @@ export function AssignTestNumberDialog({ open, onOpenChange, candidate, onSaved 
     const v = value.trim();
     if (!v || v.startsWith("TMP-")) { setDupWarning(null); return; }
     setChecking(true);
-    const t = setTimeout(async () => {
-      const { data } = await supabase
-        .from("candidates")
-        .select("id, full_name")
-        .eq("selection_id", candidate.selection_id)
-        .eq("test_number", v)
-        .neq("id", candidate.id)
-        .is("deleted_at", null)
-        .limit(1);
-      if (data && data.length > 0) {
-        setDupWarning(`No Test "${v}" sudah dipakai oleh ${(data[0] as any).full_name} di seleksi yang sama.`);
-      } else {
-        setDupWarning(null);
-      }
+    const t = setTimeout(() => {
+      const duplicate = findDuplicateTestNumberLocal({
+        selectionId: candidate.selection_id,
+        testNumber: v,
+        excludeCandidateId: candidate.id,
+      });
+      setDupWarning(duplicate ? `Nomor test sudah dipakai oleh ${duplicate.full_name ?? "peserta lain"}.` : null);
       setChecking(false);
-    }, 350);
+    }, 200);
     return () => { clearTimeout(t); setChecking(false); };
   }, [value, open, candidate]);
 
@@ -77,19 +70,15 @@ export function AssignTestNumberDialog({ open, onOpenChange, candidate, onSaved 
 
     setSaving(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
       const before = { test_number: candidate.test_number, temporary_id: candidate.temporary_id };
-      const { error } = await supabase
-        .from("candidates")
-        .update({
-          test_number: v,
-          test_number_status: "Final",
-          test_number_assigned_at: new Date().toISOString(),
-          test_number_assigned_by: u.user?.id ?? null,
-          test_number_notes: notes.trim() || null,
-        })
-        .eq("id", candidate.id);
-      if (error) throw error;
+      updateCandidateLocal(candidate.id, {
+        test_number: v,
+        test_number_status: "assigned",
+        no_test_missing: false,
+        test_number_assigned_at: new Date().toISOString(),
+        test_number_assigned_by: "local_user",
+        test_number_notes: notes.trim() || null,
+      });
       await logAudit({
         action: "set_test_number",
         module: "candidates",
