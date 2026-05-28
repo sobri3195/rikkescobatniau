@@ -20,6 +20,7 @@ import { AttachmentsSheet } from "@/components/hari-h/AttachmentsSheet";
 import { BypassDialog } from "@/components/hari-h/BypassDialog";
 import { evaluateGate, loadHariHSettings, type HariHSettings } from "@/lib/hari-h-gating";
 import { syncGroupToRekap } from "@/lib/rekap-sync";
+import { getDb, getDisplayStatusLocal, normalizeSectionStatus, isSectionCompleted, syncNeurologiLabKeswaStatusLocal } from "@/lib/localDb";
 
 // Lazy-load heavy form components so initial detail render only ships the active section.
 const IdentitasAnamnesisForm = lazy(() => import("@/components/rikkes/IdentitasAnamnesisForm").then(m => ({ default: m.IdentitasAnamnesisForm })));
@@ -116,6 +117,12 @@ function RikkesDetail() {
     load();
     logAudit({ action: "open_detail_exam", module: "rikkes", record_id: id, candidate_id: id });
   }, [id, load]);
+
+  useEffect(() => {
+    if (!exam?.id) return;
+    syncNeurologiLabKeswaStatusLocal(exam.id);
+    void load();
+  }, [exam?.id]);
 
   function getGroup(key: string): Group | undefined {
     return groups.find((g) => g.group_key === key);
@@ -264,7 +271,9 @@ function RikkesDetail() {
   }
 
   const activeGroup = getGroup(active);
-  const activeStatus = activeGroup?.status ?? "Draft";
+  const activeStatusRaw = activeGroup?.status ?? "Draft";
+  const activeMap: Record<string, string> = { neurologi_subtim: "neurologi", laboratorium: "laboratorium", psikologi_subtim: "jiwa_keswa" };
+  const activeStatus = exam?.id && activeMap[active] ? getDisplayStatusLocal(exam.id, activeMap[active], (getDb() as any)?.settings?.neuro_required ?? true) : activeStatusRaw;
   const locked = activeStatus === "Locked";
   const submitted = activeStatus === "Submitted" || activeStatus === "Approved";
   const readOnly = viewerOnly || locked || (submitted && !canEdit);
@@ -311,7 +320,9 @@ function RikkesDetail() {
             <div className="p-2 space-y-1">
               {visibleGroups.map((g) => {
                 const grp = getGroup(g.key);
-                const st = grp?.status ?? "Draft";
+                const stRaw = grp?.status ?? "Draft";
+                const mapKey: Record<string, string> = { neurologi_subtim: "neurologi", laboratorium: "laboratorium", psikologi_subtim: "jiwa_keswa" };
+                const st = exam?.id && mapKey[g.key] ? getDisplayStatusLocal(exam.id, mapKey[g.key], (getDb() as any)?.settings?.neuro_required ?? true) : stRaw;
                 const isActive = active === g.key;
                 const accent =
                   st === "Submitted" || st === "Approved" ? "border-l-emerald-500"
@@ -339,10 +350,13 @@ function RikkesDetail() {
                 </p>
               )}
             </div>
-            <div className="p-3 border-t border-slate-200">
-              <Button className="w-full bg-slate-700 hover:bg-slate-800 text-white" onClick={() => { setPreviewOpen(true); logAudit({ action: "preview_pdf", module: "rikkes", record_id: exam?.id, candidate_id: id }); }}>
+            <div className="p-3 border-t border-slate-200 space-y-2">
+              <Button className="w-full bg-slate-700 hover:bg-slate-800 text-white" onClick={() => { if (exam?.id) { syncNeurologiLabKeswaStatusLocal(exam.id); } setPreviewOpen(true); logAudit({ action: "preview_pdf", module: "rikkes", record_id: exam?.id, candidate_id: id }); }}>
                 <FileText className="h-4 w-4 mr-2" /> Preview & Finalisasi PDF
               </Button>
+              {(roles.includes("super_admin") || roles.includes("admin")) && exam?.id && (
+                <Button variant="outline" className="w-full" onClick={() => { syncNeurologiLabKeswaStatusLocal(exam.id); void load(); toast.success("Status Neurologi, Laboratorium, dan Keswa berhasil disinkronkan."); }}>Sinkronkan Status Formulir</Button>
+              )}
             </div>
           </div>
         </aside>
@@ -969,7 +983,9 @@ function PreviewDialog({ open, onOpenChange, cand, groups }: { open: boolean; on
           <div className="space-y-1.5">
             {RIKKES_GROUPS.map((g) => {
               const grp = groups.find((x) => x.group_key === g.key);
-              const st = grp?.status ?? "Draft";
+              const stRaw = grp?.status ?? "Draft";
+                const mapKey: Record<string, string> = { neurologi_subtim: "neurologi", laboratorium: "laboratorium", psikologi_subtim: "jiwa_keswa" };
+                const st = exam?.id && mapKey[g.key] ? getDisplayStatusLocal(exam.id, mapKey[g.key], (getDb() as any)?.settings?.neuro_required ?? true) : stRaw;
               const ok = st === "Submitted" || st === "Approved" || st === "Locked";
               return (
                 <div key={g.key} className="flex items-center justify-between text-sm py-1.5 border-b border-slate-100">
