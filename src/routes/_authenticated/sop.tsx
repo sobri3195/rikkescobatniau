@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollText } from "lucide-react";
@@ -13,7 +13,7 @@ function SOPListPage() {
   const [items, setItems] = useState<any[]>([]);
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
+      const { data } = await localDataApi
         .from("sop_documents")
         .select("id,sop_code,title,category,status,version,effective_date,objective")
         .order("sop_code");

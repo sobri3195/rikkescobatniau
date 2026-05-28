@@ -1,4 +1,4 @@
-import { supabaseAdmin } from "@/lib/local-supabase-shim.server";
+import { localAdminApi } from "@/lib/localDataApi.server";
 import { computeBmi } from "@/lib/sections";
 import type { CandidateProgress, ProgressItem, ProgressItemStatus } from "@/lib/candidate-progress";
 
@@ -74,8 +74,8 @@ function makeItem(
   };
 }
 
-export async function getRolesForUser(supabase: any, userId: string) {
-  const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", userId);
+export async function getRolesForUser(localDataApi: any, userId: string) {
+  const { data, error } = await localDataApi.from("user_roles").select("role").eq("user_id", userId);
   if (error) throw new Error(error.message);
   return (data ?? []).map((row: any) => row.role as string);
 }
@@ -91,7 +91,7 @@ export async function getSelectionParticipantsProgressServer(data: {
   pageSize: number;
   sort?: "newest" | "oldest" | "name_asc" | "name_desc" | "progress_desc" | "progress_asc";
 }) {
-  const { data: selection, error: selErr } = await supabaseAdmin
+  const { data: selection, error: selErr } = await localAdminApi
     .from("selections")
     .select("id,name,year_label,participant_label,location,status")
     .eq("id", data.selectionId)
@@ -108,7 +108,7 @@ export async function getSelectionParticipantsProgressServer(data: {
     return null;
   })();
 
-  let candidateQuery = supabaseAdmin
+  let candidateQuery = localAdminApi
     .from("candidates")
     .select(`
       id,full_name,test_number,temporary_id,rank,nrp_nip,unit_position,pok_korp,group_name,created_at,
@@ -169,7 +169,7 @@ export async function getSelectionParticipantsProgressServer(data: {
     };
   });
 
-  const { data: statsCandidates, error: statsErr, count: totalCandidates } = await supabaseAdmin
+  const { data: statsCandidates, error: statsErr, count: totalCandidates } = await localAdminApi
     .from("candidates")
     .select(`
       id,
@@ -217,12 +217,12 @@ export async function getSelectionParticipantsProgressServer(data: {
 
 export async function getCandidateProgressServer(candidateId: string): Promise<CandidateProgress> {
   const [{ data: cand }, { data: exam }] = await Promise.all([
-    supabaseAdmin
+    localAdminApi
       .from("candidates")
       .select("id, test_number, temporary_id")
       .eq("id", candidateId)
       .maybeSingle(),
-    supabaseAdmin
+    localAdminApi
       .from("exams")
       .select("id, exam_status, ekg_initial_status, radiology_initial_status, progress_percentage, progress_completed_count, progress_total_count, progress_detail_json, progress_last_calculated_at")
       .eq("candidate_id", candidateId)
@@ -263,21 +263,21 @@ export async function getCandidateProgressServer(candidateId: string): Promise<C
   }
 
   const [{ data: gen }, { data: mm }, { data: rikkesSections }, { data: examSections }] = await Promise.all([
-    supabaseAdmin
+    localAdminApi
       .from("exam_general")
       .select("height_cm, weight_kg, anamnesis, screening_classification, status, updated_at")
       .eq("exam_id", examId)
       .maybeSingle(),
-    supabaseAdmin
+    localAdminApi
       .from("medical_measurements")
       .select("chest_or_waist_lp, bmi, height_cm, weight_kg, updated_at")
       .eq("exam_id", examId)
       .maybeSingle(),
-    supabaseAdmin
+    localAdminApi
       .from("rikkes_form_sections")
       .select("group_key, status, submitted_at, updated_at, form_data_json")
       .eq("exam_id", examId),
-    supabaseAdmin
+    localAdminApi
       .from("exam_sections")
       .select("section_key, section_status, submitted_at, updated_at")
       .eq("exam_id", examId),

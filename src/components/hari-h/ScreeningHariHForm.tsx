@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,7 +50,7 @@ export function ScreeningHariHForm({ cand, examId }: Props) {
   const load = useCallback(async () => {
     if (!examId) { setLoading(false); return; }
     setLoading(true);
-    const { data: gen } = await supabase.from("exam_general").select("*").eq("exam_id", examId).maybeSingle();
+    const { data: gen } = await localDataApi.from("exam_general").select("*").eq("exam_id", examId).maybeSingle();
     if (gen) {
       setRowId(gen.id);
       setStatus(gen.status ?? "Draft");
@@ -63,10 +63,10 @@ export function ScreeningHariHForm({ cand, examId }: Props) {
       }));
       setPrevClassification(gen.screening_classification ?? null);
     }
-    const { data: mm } = await supabase.from("medical_measurements").select("chest_or_waist_lp").eq("exam_id", examId).maybeSingle();
+    const { data: mm } = await localDataApi.from("medical_measurements").select("chest_or_waist_lp").eq("exam_id", examId).maybeSingle();
     if (mm?.chest_or_waist_lp != null) setData((d: any) => ({ ...d, waist_cm: mm.chest_or_waist_lp }));
 
-    const { data: sec } = await supabase
+    const { data: sec } = await localDataApi
       .from("exam_sections")
       .select("*")
       .eq("exam_id", examId)
@@ -77,7 +77,7 @@ export function ScreeningHariHForm({ cand, examId }: Props) {
     // Selection info for juknis filter
     let selectionType: string | null = null;
     if (cand?.selection_id) {
-      const { data: sel } = await supabase.from("selections").select("name, participant_label").eq("id", cand.selection_id).maybeSingle();
+      const { data: sel } = await localDataApi.from("selections").select("name, participant_label").eq("id", cand.selection_id).maybeSingle();
       selectionType = sel?.participant_label || sel?.name || null;
     }
     const r = await loadJuknisRules({ selectionType, gender: cand?.gender });
@@ -124,7 +124,7 @@ export function ScreeningHariHForm({ cand, examId }: Props) {
     }
     setBusy(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
+      const { data: u } = await localDataApi.auth.getUser();
       const payload: any = {
         candidate_id: cand.id,
         exam_id: examId,
@@ -137,18 +137,18 @@ export function ScreeningHariHForm({ cand, examId }: Props) {
         status: nextStatus,
       };
       if (rowId) {
-        const { error } = await supabase.from("exam_general").update(payload).eq("id", rowId);
+        const { error } = await localDataApi.from("exam_general").update(payload).eq("id", rowId);
         if (error) throw error;
       } else {
-        const { data: row, error } = await supabase.from("exam_general").insert(payload).select().single();
+        const { data: row, error } = await localDataApi.from("exam_general").insert(payload).select().single();
         if (error) throw error;
         setRowId(row.id);
       }
       // sync measurements (height/weight/waist)
-      const { data: mm } = await supabase.from("medical_measurements").select("id").eq("exam_id", examId).maybeSingle();
+      const { data: mm } = await localDataApi.from("medical_measurements").select("id").eq("exam_id", examId).maybeSingle();
       const mmPatch: any = { height_cm: numH, weight_kg: numW, chest_or_waist_lp: numL, bmi };
-      if (mm) await supabase.from("medical_measurements").update(mmPatch).eq("id", mm.id);
-      else await supabase.from("medical_measurements").insert({ ...mmPatch, exam_id: examId, candidate_id: cand.id });
+      if (mm) await localDataApi.from("medical_measurements").update(mmPatch).eq("id", mm.id);
+      else await localDataApi.from("medical_measurements").insert({ ...mmPatch, exam_id: examId, candidate_id: cand.id });
 
       setStatus(nextStatus);
       const wasSubmitted = status === "Submitted" || status === "Approved" || status === "Locked";
@@ -183,7 +183,7 @@ export function ScreeningHariHForm({ cand, examId }: Props) {
     if (!examId) return;
     setBusy(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
+      const { data: u } = await localDataApi.auth.getUser();
       const note = prompt("Catatan (opsional):", data.clear_note || "") || null;
       const payload: any = {
         anamnesis_status: "Clear",
@@ -195,10 +195,10 @@ export function ScreeningHariHForm({ cand, examId }: Props) {
         submitted_at: new Date().toISOString(),
       };
       if (anamSection) {
-        const { error } = await supabase.from("exam_sections").update(payload).eq("id", anamSection.id);
+        const { error } = await localDataApi.from("exam_sections").update(payload).eq("id", anamSection.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("exam_sections").insert({
+        const { error } = await localDataApi.from("exam_sections").insert({
           exam_id: examId, candidate_id: cand.id,
           section_key: "anamnesa", section_name: "Anamnesa",
           assigned_role: "peserta",

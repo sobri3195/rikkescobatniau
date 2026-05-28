@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { computeBmi } from "@/lib/sections";
 
 export type ProgressItemStatus = "belum" | "berjalan" | "selesai" | "revised" | "finalized";
@@ -64,12 +64,12 @@ function makeItem(
  */
 export async function getCandidateProgress(candidateId: string): Promise<CandidateProgress> {
   const [{ data: cand }, { data: exam }] = await Promise.all([
-    supabase
+    localDataApi
       .from("candidates")
       .select("id, test_number, temporary_id")
       .eq("id", candidateId)
       .maybeSingle(),
-    supabase
+    localDataApi
       .from("exams")
       .select("id, exam_status, ekg_initial_status, radiology_initial_status")
       .eq("candidate_id", candidateId)
@@ -84,21 +84,21 @@ export async function getCandidateProgress(candidateId: string): Promise<Candida
   }
 
   const [{ data: gen }, { data: mm }, { data: rikkesSections }, { data: examSections }] = await Promise.all([
-    supabase
+    localDataApi
       .from("exam_general")
       .select("height_cm, weight_kg, anamnesis, screening_classification, status, updated_at")
       .eq("exam_id", examId)
       .maybeSingle(),
-    supabase
+    localDataApi
       .from("medical_measurements")
       .select("chest_or_waist_lp, bmi, height_cm, weight_kg, updated_at")
       .eq("exam_id", examId)
       .maybeSingle(),
-    supabase
+    localDataApi
       .from("rikkes_form_sections")
       .select("group_key, status, submitted_at, updated_at, form_data_json")
       .eq("exam_id", examId),
-    supabase
+    localDataApi
       .from("exam_sections")
       .select("section_key, section_status, submitted_at, updated_at")
       .eq("exam_id", examId),

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Check, CheckCircle2 } from "lucide-react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { toast } from "sonner";
 import { logAudit } from "@/lib/audit";
 
@@ -25,9 +25,9 @@ export function AckButton({
 
   useEffect(() => {
     (async () => {
-      const { data: u } = await supabase.auth.getUser();
+      const { data: u } = await localDataApi.auth.getUser();
       if (!u.user) return;
-      let q = supabase
+      let q = localDataApi
         .from("user_acknowledgements")
         .select("id")
         .eq("user_id", u.user.id)
@@ -42,12 +42,12 @@ export function AckButton({
 
   async function handle() {
     setBusy(true);
-    const { data: u } = await supabase.auth.getUser();
+    const { data: u } = await localDataApi.auth.getUser();
     if (!u.user) {
       setBusy(false);
       return;
     }
-    const { error } = await supabase.from("user_acknowledgements").insert({
+    const { error } = await localDataApi.from("user_acknowledgements").insert({
       user_id: u.user.id,
       document_type: documentType,
       document_id: documentId ?? null,

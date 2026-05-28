@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import JSZip from "jszip";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -84,12 +84,12 @@ function ResumeCasis() {
   const load = useCallback(async () => {
     setLoading(true);
     const [c, e, s, m, ms, sl] = await Promise.all([
-      supabase.from("candidates").select("id,selection_id,serial_number,test_number,pok_korp,panda,full_name,rank,nrp_nip,generation,unit_position,birth_place,birth_date,gender").is("deleted_at", null).order("serial_number"),
-      supabase.from("exams").select("id,candidate_id,selection_id,exam_status,progress_percentage,kesum_classification,keswa_status,final_result,final_score"),
-      supabase.from("exam_sections").select("exam_id,candidate_id,section_key,section_name,section_status,classification,findings,notes"),
-      supabase.from("medical_measurements").select("exam_id,candidate_id,height_cm,weight_kg,bmi,bmi_classification,chest_or_waist_lp,min_ideal_weight,max_ideal_weight"),
-      supabase.from("medical_summary").select("exam_id,candidate_id,count_b,count_c,count_k1,count_k2,kesum_classification,keswa_status,final_result,final_score,k1_notes,k2_notes,attention_notes,parade_notes,suggestions,initial_result,after_parade_result,rakor_result,pra_pantukhir_result"),
-      supabase.from("selections").select("id,name,year_label,institution_header_line_1,institution_header_line_2").order("created_at", { ascending: false }),
+      localDataApi.from("candidates").select("id,selection_id,serial_number,test_number,pok_korp,panda,full_name,rank,nrp_nip,generation,unit_position,birth_place,birth_date,gender").is("deleted_at", null).order("serial_number"),
+      localDataApi.from("exams").select("id,candidate_id,selection_id,exam_status,progress_percentage,kesum_classification,keswa_status,final_result,final_score"),
+      localDataApi.from("exam_sections").select("exam_id,candidate_id,section_key,section_name,section_status,classification,findings,notes"),
+      localDataApi.from("medical_measurements").select("exam_id,candidate_id,height_cm,weight_kg,bmi,bmi_classification,chest_or_waist_lp,min_ideal_weight,max_ideal_weight"),
+      localDataApi.from("medical_summary").select("exam_id,candidate_id,count_b,count_c,count_k1,count_k2,kesum_classification,keswa_status,final_result,final_score,k1_notes,k2_notes,attention_notes,parade_notes,suggestions,initial_result,after_parade_result,rakor_result,pra_pantukhir_result"),
+      localDataApi.from("selections").select("id,name,year_label,institution_header_line_1,institution_header_line_2").order("created_at", { ascending: false }),
     ]);
     const examByCand = new Map(((e.data ?? []) as Exam[]).map((x) => [x.candidate_id, x]));
     const mmByExam = new Map(((m.data ?? []) as MM[]).map((x) => [x.exam_id, x]));

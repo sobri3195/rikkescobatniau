@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,7 +15,7 @@ export function EyeVisionForm({ examId, candidateId, readOnly, canEditAfterSubmi
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const { data } = await supabase.from("exam_eye_vision").select("*").eq("exam_id", examId).maybeSingle();
+    const { data } = await localDataApi.from("exam_eye_vision").select("*").eq("exam_id", examId).maybeSingle();
     setRow(data ?? { status: "Draft" });
   }
   useEffect(() => { if (examId) load(); }, [examId]);
@@ -25,7 +25,7 @@ export function EyeVisionForm({ examId, candidateId, readOnly, canEditAfterSubmi
   async function persist(status: string, revisionReason?: string) {
     setBusy(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
+      const { data: u } = await localDataApi.auth.getUser();
       const payload = {
         exam_id: examId, candidate_id: candidateId,
         visus_od: row.visus_od ?? null, visus_os: row.visus_os ?? null,
@@ -41,8 +41,8 @@ export function EyeVisionForm({ examId, candidateId, readOnly, canEditAfterSubmi
         status,
       };
       const q = row?.id
-        ? supabase.from("exam_eye_vision").update(payload).eq("id", row.id)
-        : supabase.from("exam_eye_vision").insert(payload);
+        ? localDataApi.from("exam_eye_vision").update(payload).eq("id", row.id)
+        : localDataApi.from("exam_eye_vision").insert(payload);
       const { error } = await q;
       if (error) throw error;
       await syncRikkesGroupStatus({

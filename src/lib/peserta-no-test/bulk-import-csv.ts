@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { logAudit } from "@/lib/audit";
 import { createCandidateLocal } from "@/lib/services/candidateService";
 
@@ -72,7 +72,7 @@ export async function parseCsvAndValidate(file: File, selectionId: string): Prom
   const seenTn = new Set<string>();
 
   // Preload existing test_numbers in this selection
-  const { data: existing } = await supabase
+  const { data: existing } = await localDataApi
     .from("candidates")
     .select("test_number")
     .eq("selection_id", selectionId)
@@ -129,11 +129,11 @@ export async function applyCsvImport(rows: CsvRow[], selectionId: string): Promi
   const good = rows.filter((r) => r.status !== "error");
   if (good.length === 0) return { inserted: 0, failed: 0, errors: [] };
 
-  const { data: u } = await supabase.auth.getUser();
+  const { data: u } = await localDataApi.auth.getUser();
   const uid = u.user?.id ?? null;
 
   // Create import session for rollback tracking
-  const { data: session } = await supabase
+  const { data: session } = await localDataApi
     .from("import_sessions")
     .insert({
       selection_id: selectionId,
@@ -186,7 +186,7 @@ export async function applyCsvImport(rows: CsvRow[], selectionId: string): Promi
   });
 
   if (sessionId) {
-    await supabase.from("import_sessions").update({
+    await localDataApi.from("import_sessions").update({
       success_rows: inserted,
       failed_rows: failed,
       status: failed === 0 ? "Completed" : (inserted > 0 ? "Completed with Errors" : "Error"),

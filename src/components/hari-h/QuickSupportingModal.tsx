@@ -360,7 +360,7 @@ function AttachmentPreview({ att, onRemove }: { att: Attachment; onRemove: () =>
     let cancelled = false;
     if (!isImage) return;
     (async () => {
-      const { data } = await supabase.storage
+      const { data } = await localDataApi.storage
         .from("hari-h-attachments")
         .createSignedUrl(att.path, 300);
       if (!cancelled) setUrl(data?.signedUrl ?? null);

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -26,7 +26,7 @@ function SettingHariHPage() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("selections").select("id, name").order("created_at", { ascending: false });
+      const { data } = await localDataApi.from("selections").select("id, name").order("created_at", { ascending: false });
       setSelections(data ?? []);
     })();
   }, []);
@@ -34,7 +34,7 @@ function SettingHariHPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const sid = selectionId === "GLOBAL" ? null : selectionId;
-    const q = supabase.from("hari_h_settings" as any).select("*");
+    const q = localDataApi.from("hari_h_settings" as any).select("*");
     const { data } = sid ? await q.eq("selection_id", sid).maybeSingle() : await q.is("selection_id", null).maybeSingle();
     if (data) setSettings(data as unknown as HariHSettings);
     else setSettings({ ...DEFAULT_HARI_H_SETTINGS, selection_id: sid });
@@ -55,13 +55,13 @@ function SettingHariHPage() {
         require_radiology_before_subteam: settings.require_radiology_before_subteam,
         allow_bypass_with_reason: settings.allow_bypass_with_reason,
       };
-      const q = supabase.from("hari_h_settings" as any).select("id");
+      const q = localDataApi.from("hari_h_settings" as any).select("id");
       const existing = sid ? await q.eq("selection_id", sid).maybeSingle() : await q.is("selection_id", null).maybeSingle();
       let res;
       if (existing.data) {
-        res = await supabase.from("hari_h_settings" as any).update(payload).eq("id", (existing.data as any).id);
+        res = await localDataApi.from("hari_h_settings" as any).update(payload).eq("id", (existing.data as any).id);
       } else {
-        res = await supabase.from("hari_h_settings" as any).insert(payload);
+        res = await localDataApi.from("hari_h_settings" as any).insert(payload);
       }
       if (res.error) throw res.error;
       await logAudit({ action: "update_hari_h_settings", module: "hari_h", after: payload });

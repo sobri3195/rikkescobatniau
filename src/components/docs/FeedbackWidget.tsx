@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ThumbsUp, ThumbsDown } from "lucide-react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { toast } from "sonner";
 import { logAudit } from "@/lib/audit";
 
@@ -12,8 +12,8 @@ export function FeedbackWidget({ articleId }: { articleId: string }) {
   const [sent, setSent] = useState(false);
 
   async function submit(isHelpful: boolean, withText: boolean) {
-    const { data: u } = await supabase.auth.getUser();
-    const { error } = await supabase.from("help_article_feedback").insert({
+    const { data: u } = await localDataApi.auth.getUser();
+    const { error } = await localDataApi.from("help_article_feedback").insert({
       article_id: articleId,
       user_id: u.user?.id ?? null,
       is_helpful: isHelpful,
@@ -22,7 +22,7 @@ export function FeedbackWidget({ articleId }: { articleId: string }) {
     if (error) return toast.error(error.message);
     // increment counter (best-effort, no atomic needed here)
     const col = isHelpful ? "helpful_count" : "not_helpful_count";
-    const { data: art } = await supabase
+    const { data: art } = await localDataApi
       .from("help_articles")
       .select(col)
       .eq("id", articleId)
@@ -32,7 +32,7 @@ export function FeedbackWidget({ articleId }: { articleId: string }) {
       const patch = (
         isHelpful ? { helpful_count: next } : { not_helpful_count: next }
       ) as { helpful_count?: number; not_helpful_count?: number };
-      await supabase.from("help_articles").update(patch).eq("id", articleId);
+      await localDataApi.from("help_articles").update(patch).eq("id", articleId);
     }
     setSent(true);
     toast.success("Terima kasih atas feedback Anda");

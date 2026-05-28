@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -44,7 +44,7 @@ export function LabForm({ examId, candidateId, readOnly, canEditAfterSubmit }: {
   const [highlighted, setHighlighted] = useState<Set<string>>(new Set());
 
   async function load() {
-    const { data } = await supabase.from("exam_lab").select("*").eq("exam_id", examId).maybeSingle();
+    const { data } = await localDataApi.from("exam_lab").select("*").eq("exam_id", examId).maybeSingle();
     setRow(data ?? { status: "Draft" });
   }
   useEffect(() => { if (examId) load(); }, [examId]);
@@ -100,15 +100,15 @@ export function LabForm({ examId, candidateId, readOnly, canEditAfterSubmit }: {
   async function persist(status: string, revisionReason?: string) {
     setBusy(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
+      const { data: u } = await localDataApi.auth.getUser();
       const fields: Record<string, any> = { exam_id: examId, candidate_id: candidateId, examiner_id: u.user?.id, examined_at: new Date().toISOString(), status };
       [...HEMA, ...URIN, ...KIMIA, ...NARKOBA].forEach(([k]) => { fields[k] = row[k] ?? null; });
       fields.narkoba_kesimpulan = row.narkoba_kesimpulan ?? null;
       fields.conclusion = row.conclusion ?? null;
       fields.qualification_u = row.qualification_u || null;
       const q = row?.id
-        ? supabase.from("exam_lab").update(fields as any).eq("id", row.id)
-        : supabase.from("exam_lab").insert(fields as any);
+        ? localDataApi.from("exam_lab").update(fields as any).eq("id", row.id)
+        : localDataApi.from("exam_lab").insert(fields as any);
       const { error } = await q;
       if (error) throw error;
       await logAudit({

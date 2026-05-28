@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -40,7 +40,7 @@ function BypassReviewPage() {
 
   async function load() {
     setLoading(true);
-    let q = supabase
+    let q = localDataApi
       .from("exams")
       .select("id, candidate_id, selection_id, bypass_initial_at, bypass_initial_by, bypass_initial_reason, bypass_initial_reviewed_at, bypass_initial_reviewed_by, hari_h_stage, ekg_initial_status, radiology_initial_status, candidates!inner(full_name, test_number, temporary_id)")
       .not("bypass_initial_at", "is", null)
@@ -73,8 +73,8 @@ function BypassReviewPage() {
   });
 
   async function approve(r: Row) {
-    const { data: u } = await supabase.auth.getUser();
-    const { error } = await supabase
+    const { data: u } = await localDataApi.auth.getUser();
+    const { error } = await localDataApi
       .from("exams")
       .update({
         bypass_initial_reviewed_by: u.user?.id,
@@ -83,7 +83,7 @@ function BypassReviewPage() {
       .eq("id", r.id);
     if (error) return toast.error(error.message);
     // Also approve any pending bypass_audit rows for this exam
-    await supabase
+    await localDataApi
       .from("bypass_audit")
       .update({
         status: "approved",
@@ -100,8 +100,8 @@ function BypassReviewPage() {
   async function reject(r: Row) {
     const note = window.prompt("Alasan penolakan bypass:");
     if (!note || note.trim().length < 5) return;
-    const { data: u } = await supabase.auth.getUser();
-    await supabase
+    const { data: u } = await localDataApi.auth.getUser();
+    await localDataApi
       .from("bypass_audit")
       .update({
         status: "rejected",

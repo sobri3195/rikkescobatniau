@@ -164,7 +164,7 @@ function queryBuilder(table: string) {
   return chain;
 }
 
-export const supabase: any = {
+export const localDataApi: any = {
   auth: {
     getSession: async () => ({ data: { session: getLocalSession() }, error: null }),
     getUser: async () => ({

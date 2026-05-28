@@ -1,7 +1,7 @@
 import { createServerFn } from "@/shims/tanstack-react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/lib/local-auth-middleware";
-import { supabaseAdmin } from "@/lib/local-supabase-shim.server";
+import { requireLocalAuth } from "@/lib/local-auth-middleware";
+import { localAdminApi } from "@/lib/localDataApi.server";
 
 const MergeInput = z.object({
   winnerId: z.string().uuid(),
@@ -25,7 +25,7 @@ const MergeInput = z.object({
 });
 
 export const mergeCandidates = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireLocalAuth])
   .inputValidator((input) => MergeInput.parse(input))
   .handler(async ({ data, context }) => {
     const { userId } = context;
@@ -33,19 +33,17 @@ export const mergeCandidates = createServerFn({ method: "POST" })
       throw new Error("Pemenang dan loser tidak boleh sama");
     }
     // Verify role via service-role client
-    const { data: roles, error: rolesErr } = await supabaseAdmin
+    const { data: roles, error: rolesErr } = await localAdminApi
       .from("user_roles")
       .select("role")
       .eq("user_id", userId);
     if (rolesErr) throw new Error(rolesErr.message);
-    const allowed = (roles ?? []).some((r) =>
-      ["super_admin", "admin"].includes(String(r.role)),
-    );
+    const allowed = (roles ?? []).some((r) => ["super_admin", "admin"].includes(String(r.role)));
     if (!allowed) throw new Error("Hanya admin/super_admin yang bisa merge");
 
     const [{ data: winner }, { data: loser }] = await Promise.all([
-      supabaseAdmin.from("candidates").select("*").eq("id", data.winnerId).single(),
-      supabaseAdmin.from("candidates").select("*").eq("id", data.loserId).single(),
+      localAdminApi.from("candidates").select("*").eq("id", data.winnerId).single(),
+      localAdminApi.from("candidates").select("*").eq("id", data.loserId).single(),
     ]);
     if (!winner || !loser) throw new Error("Salah satu peserta tidak ditemukan");
     if (winner.deleted_at) throw new Error("Pemenang sudah terhapus");
@@ -60,7 +58,7 @@ export const mergeCandidates = createServerFn({ method: "POST" })
     }
     let winnerAfter = winner;
     if (Object.keys(cleanPatch).length > 0) {
-      const { data: upd, error: updErr } = await supabaseAdmin
+      const { data: upd, error: updErr } = await localAdminApi
         .from("candidates")
         .update(cleanPatch as never)
         .eq("id", data.winnerId)
@@ -71,7 +69,7 @@ export const mergeCandidates = createServerFn({ method: "POST" })
     }
 
     // Soft-delete loser
-    const { error: delErr } = await supabaseAdmin
+    const { error: delErr } = await localAdminApi
       .from("candidates")
       .update({
         deleted_at: new Date().toISOString(),
@@ -82,7 +80,7 @@ export const mergeCandidates = createServerFn({ method: "POST" })
     if (delErr) throw new Error(delErr.message);
 
     // Log to candidate_merge_logs
-    const { error: logErr } = await supabaseAdmin.from("candidate_merge_logs").insert({
+    const { error: logErr } = await localAdminApi.from("candidate_merge_logs").insert({
       primary_candidate_id: data.winnerId,
       duplicate_candidate_id: data.loserId,
       merged_by: userId,
@@ -93,7 +91,7 @@ export const mergeCandidates = createServerFn({ method: "POST" })
     if (logErr) throw new Error(logErr.message);
 
     // App-level audit
-    await supabaseAdmin.from("audit_logs").insert({
+    await localAdminApi.from("audit_logs").insert({
       user_id: userId,
       action: "merge_candidates",
       module: "peserta_tanpa_no_test",

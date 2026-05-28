@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 
 export type JuknisRule = {
   id: string;
@@ -25,7 +25,7 @@ export type JuknisCheck = {
 };
 
 export async function loadJuknisRules(opts: { selectionType?: string | null; gender?: string | null }) {
-  let q = supabase.from("juknis_parameter_rules" as any).select("*");
+  let q = localDataApi.from("juknis_parameter_rules" as any).select("*");
   const { data } = await q;
   const rows = (data as any as JuknisRule[]) ?? [];
   return rows.filter((r) => {

@@ -1,11 +1,11 @@
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 
 type Att = { name?: string; path: string; type?: string };
 
 async function downloadOne(path: string): Promise<Blob | null> {
-  const { data, error } = await supabase.storage.from("hari-h-attachments").createSignedUrl(path, 300);
+  const { data, error } = await localDataApi.storage.from("hari-h-attachments").createSignedUrl(path, 300);
   if (error || !data?.signedUrl) return null;
   try {
     const r = await fetch(data.signedUrl);
@@ -27,7 +27,7 @@ export async function exportAttachmentsZip(opts: {
   onProgress?: (done: number, total: number) => void;
 }) {
   // 1) Resolve candidate set
-  let candQ = supabase.from("candidates").select("id, full_name, test_number, temporary_id, selection_id");
+  let candQ = localDataApi.from("candidates").select("id, full_name, test_number, temporary_id, selection_id");
   if (opts.candidateIds?.length) candQ = candQ.in("id", opts.candidateIds);
   else if (opts.selectionId) candQ = candQ.eq("selection_id", opts.selectionId);
   const { data: cands, error: cErr } = await candQ;
@@ -37,14 +37,14 @@ export async function exportAttachmentsZip(opts: {
   const candMap = new Map<string, any>((cands ?? []).map((c) => [c.id, c]));
 
   // 2) Pull attachments from EKG + Radiology rows for those exams
-  const { data: exams } = await supabase.from("exams").select("id, candidate_id").in("candidate_id", candidateIds);
+  const { data: exams } = await localDataApi.from("exams").select("id, candidate_id").in("candidate_id", candidateIds);
   const examMap = new Map<string, string>((exams ?? []).map((e: any) => [e.id, e.candidate_id]));
   const examIds = [...examMap.keys()];
   if (examIds.length === 0) throw new Error("Tidak ada exam terkait peserta");
 
   const [ekg, rad] = await Promise.all([
-    supabase.from("exam_cardiology").select("exam_id, attachments_json").in("exam_id", examIds),
-    supabase.from("exam_radiology").select("exam_id, attachments_json").in("exam_id", examIds),
+    localDataApi.from("exam_cardiology").select("exam_id, attachments_json").in("exam_id", examIds),
+    localDataApi.from("exam_radiology").select("exam_id, attachments_json").in("exam_id", examIds),
   ]);
 
   type Job = { candidateId: string; folder: string; att: Att };

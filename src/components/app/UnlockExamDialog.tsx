@@ -14,7 +14,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Unlock, AlertTriangle } from "lucide-react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { logAudit } from "@/lib/audit";
 import { toast } from "sonner";
 
@@ -44,8 +44,8 @@ export function UnlockExamDialog({
     if (!canSubmit || !exam) return;
     setBusy(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
-      const { error: e1 } = await supabase
+      const { data: u } = await localDataApi.auth.getUser();
+      const { error: e1 } = await localDataApi
         .from("exams")
         .update({
           exam_status: "Revision Needed",
@@ -57,7 +57,7 @@ export function UnlockExamDialog({
       if (e1) throw e1;
 
       if (scope === "full") {
-        await supabase
+        await localDataApi
           .from("exam_sections")
           .update({
             section_status: "Revision",
@@ -68,7 +68,7 @@ export function UnlockExamDialog({
           .eq("exam_id", exam.id);
       }
 
-      const { error: e3 } = await supabase.from("unlock_logs").insert({
+      const { error: e3 } = await localDataApi.from("unlock_logs").insert({
         exam_id: exam.id,
         candidate_id: candidate?.id,
         unlocked_by: u.user!.id,

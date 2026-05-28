@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { useAuth } from "@/lib/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,8 +56,8 @@ function MedicalSubteamsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: sb }, { data: sel }] = await Promise.all([
-      supabase.from("medical_subteams").select("*").order("section_key"),
-      supabase.from("selections").select("id,name").order("created_at", { ascending: false }),
+      localDataApi.from("medical_subteams").select("*").order("section_key"),
+      localDataApi.from("selections").select("id,name").order("created_at", { ascending: false }),
     ]);
     setRows((sb ?? []) as Row[]);
     setSelections((sel ?? []) as any);
@@ -94,11 +94,11 @@ function MedicalSubteamsPage() {
     };
     try {
       if (editing.id) {
-        const { error } = await supabase.from("medical_subteams").update(payload).eq("id", editing.id);
+        const { error } = await localDataApi.from("medical_subteams").update(payload).eq("id", editing.id);
         if (error) throw error;
         await logAudit({ action: "update_medical_subteam", module: "master", record_id: editing.id, after: payload });
       } else {
-        const { data, error } = await supabase.from("medical_subteams").insert(payload).select().single();
+        const { data, error } = await localDataApi.from("medical_subteams").insert(payload).select().single();
         if (error) throw error;
         await logAudit({ action: "create_medical_subteam", module: "master", record_id: data?.id, after: payload });
       }
@@ -109,7 +109,7 @@ function MedicalSubteamsPage() {
 
   async function remove(r: Row) {
     if (!confirm(`Hapus subtim ${r.display_title}?`)) return;
-    const { error } = await supabase.from("medical_subteams").delete().eq("id", r.id);
+    const { error } = await localDataApi.from("medical_subteams").delete().eq("id", r.id);
     if (error) { toast.error(error.message); return; }
     await logAudit({ action: "delete_medical_subteam", module: "master", record_id: r.id, before: r });
     toast.success("Dihapus"); load();

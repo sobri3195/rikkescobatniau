@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Rocket } from "lucide-react";
@@ -14,7 +14,7 @@ function ReleaseNotesPage() {
   const [items, setItems] = useState<any[]>([]);
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
+      const { data } = await localDataApi
         .from("release_notes")
         .select("*")
         .eq("status", "Published")

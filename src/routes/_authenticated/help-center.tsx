@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { useAuth } from "@/lib/use-auth";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,7 +33,7 @@ function HelpCenterPage() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
+      const { data } = await localDataApi
         .from("help_articles")
         .select("id,title,slug,category,summary,tags_json,status,role_visibility_json,helpful_count,updated_at")
         .eq("status", "Published")

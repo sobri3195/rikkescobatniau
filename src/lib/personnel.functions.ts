@@ -1,13 +1,13 @@
 import { createServerFn } from "@/shims/tanstack-react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/lib/local-auth-middleware";
-import { supabaseAdmin } from "@/lib/local-supabase-shim.server";
+import { requireLocalAuth } from "@/lib/local-auth-middleware";
+import { localAdminApi } from "@/lib/localDataApi.server";
 
 const STORAGE_BUCKETS = ["hari-h-attachments", "qa-evidence"] as const;
 
 function extractStoragePath(url: string, bucket: string): string | null {
   if (!url) return null;
-  // Match supabase public/sign URLs: /storage/v1/object/(public|sign)/<bucket>/<path>
+  // Match localDataApi public/sign URLs: /storage/v1/object/(public|sign)/<bucket>/<path>
   const re = new RegExp(`/storage/v1/object/(?:public|sign|authenticated)/${bucket}/([^?#]+)`);
   const m = url.match(re);
   if (m) return decodeURIComponent(m[1]);
@@ -19,7 +19,7 @@ function extractStoragePath(url: string, bucket: string): string | null {
 }
 
 export const deletePersonnel = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireLocalAuth])
   .inputValidator((input: unknown) =>
     z
       .object({
@@ -29,10 +29,10 @@ export const deletePersonnel = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
+    const { localDataApi, userId } = context;
 
     // Server-side role enforcement (defense in depth — RPC also checks).
-    const { data: rolesData, error: roleErr } = await supabase
+    const { data: rolesData, error: roleErr } = await localDataApi
       .from("user_roles")
       .select("role")
       .eq("user_id", userId);
@@ -47,11 +47,11 @@ export const deletePersonnel = createServerFn({ method: "POST" })
     for (const bucket of STORAGE_BUCKETS) storagePaths[bucket] = [];
 
     const [{ data: atts }, { data: exps }] = await Promise.all([
-      supabaseAdmin
+      localAdminApi
         .from("medical_attachments")
         .select("file_url")
         .eq("candidate_id", data.candidateId),
-      supabaseAdmin
+      localAdminApi
         .from("document_exports")
         .select("file_url")
         .eq("candidate_id", data.candidateId),
@@ -66,10 +66,10 @@ export const deletePersonnel = createServerFn({ method: "POST" })
     }
 
     // Atomic DB delete via SECURITY DEFINER RPC (also re-checks role + writes audit).
-    const { data: rpcRes, error: rpcErr } = await supabase.rpc(
-      "delete_personnel_cascade",
-      { _candidate_id: data.candidateId, _reason: data.reason },
-    );
+    const { data: rpcRes, error: rpcErr } = await localDataApi.rpc("delete_personnel_cascade", {
+      _candidate_id: data.candidateId,
+      _reason: data.reason,
+    });
     if (rpcErr) throw new Error(rpcErr.message);
 
     // Best-effort storage cleanup (after DB commit).
@@ -77,7 +77,7 @@ export const deletePersonnel = createServerFn({ method: "POST" })
     for (const bucket of STORAGE_BUCKETS) {
       const paths = Array.from(new Set(storagePaths[bucket]));
       if (paths.length === 0) continue;
-      const { error: stErr } = await supabaseAdmin.storage.from(bucket).remove(paths);
+      const { error: stErr } = await localAdminApi.storage.from(bucket).remove(paths);
       storageResult[bucket] = stErr
         ? { removed: 0, error: stErr.message }
         : { removed: paths.length };

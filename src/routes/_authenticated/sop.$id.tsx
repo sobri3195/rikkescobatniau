@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ChevronLeft } from "lucide-react";
@@ -16,7 +16,7 @@ function SOPDetail() {
   const [s, setS] = useState<any>(null);
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("sop_documents").select("*").eq("id", id).maybeSingle();
+      const { data } = await localDataApi.from("sop_documents").select("*").eq("id", id).maybeSingle();
       setS(data);
     })();
   }, [id]);

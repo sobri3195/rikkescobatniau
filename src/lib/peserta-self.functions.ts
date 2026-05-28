@@ -1,6 +1,6 @@
 import { createServerFn } from "@/shims/tanstack-react-start";
-import { requireSupabaseAuth } from "@/lib/local-auth-middleware";
-import { supabaseAdmin } from "@/lib/local-supabase-shim.server";
+import { requireLocalAuth } from "@/lib/local-auth-middleware";
+import { localAdminApi } from "@/lib/localDataApi.server";
 
 /**
  * Mengambil exam milik peserta/casis yang sedang login (berdasarkan
@@ -10,12 +10,12 @@ import { supabaseAdmin } from "@/lib/local-supabase-shim.server";
  * mengisi anamnesis tanpa setup admin.
  */
 export const getMyExamForAnamnesis = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireLocalAuth])
   .handler(async ({ context }) => {
-    const { userId, supabase } = context;
+    const { userId, localDataApi } = context;
 
     // Pastikan user benar-benar peserta/casis (jangan auto-provision untuk role lain).
-    const { data: roleRows } = await supabase
+    const { data: roleRows } = await localDataApi
       .from("user_roles")
       .select("role")
       .eq("user_id", userId);
@@ -26,16 +26,18 @@ export const getMyExamForAnamnesis = createServerFn({ method: "GET" })
     }
 
     // Profil (untuk nama saat auto-provision)
-    const { data: profile } = await supabaseAdmin
+    const { data: profile } = await localAdminApi
       .from("profiles")
       .select("full_name, email, nrp_nip")
       .eq("auth_user_id", userId)
       .maybeSingle();
 
     // Cari kandidat yang sudah ditautkan
-    let { data: cand } = await supabaseAdmin
+    let { data: cand } = await localAdminApi
       .from("candidates")
-      .select("id, selection_id, full_name, rank, nrp_nip, test_number, temporary_id, unit_position, pok_korp, panda")
+      .select(
+        "id, selection_id, full_name, rank, nrp_nip, test_number, temporary_id, unit_position, pok_korp, panda",
+      )
       .eq("linked_user_id", userId)
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
@@ -44,7 +46,7 @@ export const getMyExamForAnamnesis = createServerFn({ method: "GET" })
 
     if (!cand) {
       // Auto-provision sandbox candidate pada seleksi terbaru
-      const { data: sel } = await supabaseAdmin
+      const { data: sel } = await localAdminApi
         .from("selections")
         .select("id, name")
         .order("created_at", { ascending: false })
@@ -54,7 +56,7 @@ export const getMyExamForAnamnesis = createServerFn({ method: "GET" })
         throw new Error("Belum ada Master Seleksi. Hubungi admin untuk dibuatkan.");
       }
       const fullName = profile?.full_name || profile?.email || "Peserta Uji Coba";
-      const { data: created, error: insErr } = await supabaseAdmin
+      const { data: created, error: insErr } = await localAdminApi
         .from("candidates")
         .insert({
           selection_id: sel.id,
@@ -64,14 +66,16 @@ export const getMyExamForAnamnesis = createServerFn({ method: "GET" })
           status: "Active",
           registration_notes: "Auto-provisioned untuk akun peserta uji coba",
         })
-        .select("id, selection_id, full_name, rank, nrp_nip, test_number, temporary_id, unit_position, pok_korp, panda")
+        .select(
+          "id, selection_id, full_name, rank, nrp_nip, test_number, temporary_id, unit_position, pok_korp, panda",
+        )
         .single();
       if (insErr) throw new Error(insErr.message);
       cand = created;
     }
 
     // Ambil exam (trigger create_exam_for_candidate harusnya sudah membuatkannya)
-    let { data: exam } = await supabaseAdmin
+    let { data: exam } = await localAdminApi
       .from("exams")
       .select("id, candidate_id, selection_id, exam_status, progress_percentage, hari_h_stage")
       .eq("candidate_id", cand!.id)
@@ -80,7 +84,7 @@ export const getMyExamForAnamnesis = createServerFn({ method: "GET" })
       .maybeSingle();
 
     if (!exam) {
-      const { data: createdExam, error: examErr } = await supabaseAdmin
+      const { data: createdExam, error: examErr } = await localAdminApi
         .from("exams")
         .insert({
           candidate_id: cand!.id,
@@ -95,7 +99,7 @@ export const getMyExamForAnamnesis = createServerFn({ method: "GET" })
     }
 
     // Label seleksi (untuk header)
-    const { data: selRow } = await supabaseAdmin
+    const { data: selRow } = await localAdminApi
       .from("selections")
       .select("name")
       .eq("id", cand!.selection_id)

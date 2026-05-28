@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { logAudit } from "@/lib/audit";
 
 // ---------- Types ----------
@@ -113,16 +113,16 @@ async function fetchData(selectionId: string): Promise<{ selection: any; rows: R
   const [selRes, cRes, eRes, sRes, mRes, msRes] = await Promise.all([
     isAll
       ? Promise.resolve({ data: { id: "all", name: "SEMUA SELEKSI", year_label: new Date().getFullYear().toString(), report_title: "REKAP APLIKASI — SEMUA SELEKSI" }, error: null } as any)
-      : supabase.from("selections").select("*").eq("id", selectionId).single(),
+      : localDataApi.from("selections").select("*").eq("id", selectionId).single(),
     isAll
-      ? supabase.from("candidates").select("*").is("deleted_at", null).order("serial_number")
-      : supabase.from("candidates").select("*").eq("selection_id", selectionId).is("deleted_at", null).order("serial_number"),
+      ? localDataApi.from("candidates").select("*").is("deleted_at", null).order("serial_number")
+      : localDataApi.from("candidates").select("*").eq("selection_id", selectionId).is("deleted_at", null).order("serial_number"),
     isAll
-      ? supabase.from("exams").select("*")
-      : supabase.from("exams").select("*").eq("selection_id", selectionId),
-    supabase.from("exam_sections").select("*"),
-    supabase.from("medical_measurements").select("*"),
-    supabase.from("medical_summary").select("*"),
+      ? localDataApi.from("exams").select("*")
+      : localDataApi.from("exams").select("*").eq("selection_id", selectionId),
+    localDataApi.from("exam_sections").select("*"),
+    localDataApi.from("medical_measurements").select("*"),
+    localDataApi.from("medical_summary").select("*"),
   ]);
   if (selRes.error || !selRes.data) throw new Error("Data seleksi tidak ditemukan");
   const cands = cRes.data ?? [];
@@ -726,8 +726,8 @@ async function buildLampiranSheet(wb: ExcelJS.Workbook, sel: any, rows: Row[]) {
   const examIds = rows.map((r) => r.exam?.id).filter(Boolean) as string[];
   if (examIds.length === 0) return;
   const [cardRes, radRes] = await Promise.all([
-    supabase.from("exam_cardiology").select("exam_id, examination_type, examined_on, status, attachments_json, updated_at").in("exam_id", examIds),
-    supabase.from("exam_radiology").select("exam_id, examination_type, examined_on, status, attachments_json, updated_at").in("exam_id", examIds),
+    localDataApi.from("exam_cardiology").select("exam_id, examination_type, examined_on, status, attachments_json, updated_at").in("exam_id", examIds),
+    localDataApi.from("exam_radiology").select("exam_id, examination_type, examined_on, status, attachments_json, updated_at").in("exam_id", examIds),
   ]);
   const candByExam = new Map<string, any>();
   for (const r of rows) if (r.exam?.id) candByExam.set(r.exam.id, r.candidate);
@@ -801,8 +801,8 @@ async function saveExportHistory(args: {
   row_count: number;
   sheet_count: number;
 }) {
-  const { data: u } = await supabase.auth.getUser();
-  const { error } = await supabase.from("document_exports").insert({
+  const { data: u } = await localDataApi.auth.getUser();
+  const { error } = await localDataApi.from("document_exports").insert({
     selection_id: args.selection_id,
     export_type: "XLSX",
     document_type: "RIKKES_MULTI_SHEET",

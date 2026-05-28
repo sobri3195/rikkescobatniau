@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -81,12 +81,12 @@ function SelectionDetail() {
     async function load() {
       setLoading(true);
       const [s, ex, c] = await Promise.all([
-        supabase.from("selections").select("*").eq("id", selectionId).maybeSingle(),
-        supabase
+        localDataApi.from("selections").select("*").eq("id", selectionId).maybeSingle(),
+        localDataApi
           .from("exams")
           .select("id,candidate_id,exam_status,hari_h_stage,progress_percentage,ekg_initial_status,radiology_initial_status")
           .eq("selection_id", selectionId),
-        supabase
+        localDataApi
           .from("candidates")
           .select("id,full_name,test_number,temporary_id,rank,nrp_nip,unit_position")
           .eq("selection_id", selectionId)

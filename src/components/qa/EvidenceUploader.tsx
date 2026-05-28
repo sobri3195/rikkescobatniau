@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Button } from "@/components/ui/button";
 import { Upload, X, FileCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -20,15 +20,15 @@ export function EvidenceUploader({
     if (!file) return;
     setUploading(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
+      const { data: u } = await localDataApi.auth.getUser();
       const path = `${u.user?.id ?? "anon"}/${folder}/${Date.now()}-${file.name}`;
-      const { error } = await supabase.storage
+      const { error } = await localDataApi.storage
         .from("qa-evidence")
         .upload(path, file, { upsert: false });
       if (error) throw error;
-      const { data } = supabase.storage.from("qa-evidence").getPublicUrl(path);
+      const { data } = localDataApi.storage.from("qa-evidence").getPublicUrl(path);
       // Bucket is private; use signed URL
-      const { data: signed } = await supabase.storage
+      const { data: signed } = await localDataApi.storage
         .from("qa-evidence")
         .createSignedUrl(path, 60 * 60 * 24 * 30);
       onChange(signed?.signedUrl ?? data.publicUrl);

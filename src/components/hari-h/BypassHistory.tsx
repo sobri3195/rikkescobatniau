@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Badge } from "@/components/ui/badge";
 import { ShieldAlert, CheckCircle2, XCircle, Clock } from "lucide-react";
 
@@ -27,7 +27,7 @@ export function BypassHistory({ examId }: { examId: string }) {
   useEffect(() => {
     let mounted = true;
     async function load() {
-      const { data } = await supabase
+      const { data } = await localDataApi
         .from("bypass_audit")
         .select("id,bypass_type,reason,status,requested_at,reviewed_at,review_note,section_key")
         .eq("exam_id", examId)
@@ -38,11 +38,11 @@ export function BypassHistory({ examId }: { examId: string }) {
       }
     }
     load();
-    const ch = supabase
+    const ch = localDataApi
       .channel(`bypass-audit-${examId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "bypass_audit", filter: `exam_id=eq.${examId}` }, () => load())
       .subscribe();
-    return () => { mounted = false; supabase.removeChannel(ch); };
+    return () => { mounted = false; localDataApi.removeChannel(ch); };
   }, [examId]);
 
   if (loading) return <div className="text-xs text-muted-foreground">Memuat riwayat bypass…</div>;

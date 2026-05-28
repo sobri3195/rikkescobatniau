@@ -4,7 +4,7 @@
 // defaults from rikkes-calculations.ts when no active rule set exists,
 // so the rest of the app keeps working during transition.
 
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import type { Classification, KesumValue, KeswaValue, FinalValue, SectionLite } from "@/lib/rikkes-calculations";
 
 export interface BmiRule {
@@ -85,14 +85,14 @@ const DEFAULT_KESWA: KeswaConfig = {
 
 export async function loadRuleSet(ruleSetId: string): Promise<FormulaRuleSet | null> {
   const [rs, bmi, kesum, keswa, finals, scoring, stakes, severity] = await Promise.all([
-    supabase.from("formula_rule_sets").select("*").eq("id", ruleSetId).maybeSingle(),
-    supabase.from("bmi_rules").select("*").eq("rule_set_id", ruleSetId).order("sort_order"),
-    supabase.from("kesum_rule_configs").select("*").eq("rule_set_id", ruleSetId).order("sort_order"),
-    supabase.from("keswa_rule_configs").select("*").eq("rule_set_id", ruleSetId).maybeSingle(),
-    supabase.from("final_result_rules").select("*").eq("rule_set_id", ruleSetId).order("priority_order"),
-    supabase.from("scoring_rules").select("*").eq("rule_set_id", ruleSetId),
-    supabase.from("stakes_configs").select("*").eq("rule_set_id", ruleSetId).order("sort_order"),
-    supabase.from("classification_ranks").select("*").eq("rule_set_id", ruleSetId).order("rank_value"),
+    localDataApi.from("formula_rule_sets").select("*").eq("id", ruleSetId).maybeSingle(),
+    localDataApi.from("bmi_rules").select("*").eq("rule_set_id", ruleSetId).order("sort_order"),
+    localDataApi.from("kesum_rule_configs").select("*").eq("rule_set_id", ruleSetId).order("sort_order"),
+    localDataApi.from("keswa_rule_configs").select("*").eq("rule_set_id", ruleSetId).maybeSingle(),
+    localDataApi.from("final_result_rules").select("*").eq("rule_set_id", ruleSetId).order("priority_order"),
+    localDataApi.from("scoring_rules").select("*").eq("rule_set_id", ruleSetId),
+    localDataApi.from("stakes_configs").select("*").eq("rule_set_id", ruleSetId).order("sort_order"),
+    localDataApi.from("classification_ranks").select("*").eq("rule_set_id", ruleSetId).order("rank_value"),
   ]);
   if (!rs.data) return null;
   return {
@@ -116,7 +116,7 @@ export async function loadRuleSet(ruleSetId: string): Promise<FormulaRuleSet | n
 }
 
 export async function loadActiveDefaultRuleSet(): Promise<FormulaRuleSet | null> {
-  const { data } = await supabase
+  const { data } = await localDataApi
     .from("formula_rule_sets")
     .select("id")
     .eq("status", "Active")
@@ -130,7 +130,7 @@ export async function loadActiveDefaultRuleSet(): Promise<FormulaRuleSet | null>
 
 export async function loadRuleSetForSelection(selectionId: string | null | undefined): Promise<FormulaRuleSet | null> {
   if (selectionId) {
-    const { data: sel } = await supabase
+    const { data: sel } = await localDataApi
       .from("selections")
       .select("active_formula_rule_set_id")
       .eq("id", selectionId)
