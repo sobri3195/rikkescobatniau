@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/use-auth";
 
@@ -21,7 +21,7 @@ export function RealtimeNotifier() {
     const channels: any[] = [];
 
     if (canReviewBypass) {
-      const ch = supabase
+      const ch = localDataApi
         .channel("rt-bypass-audit")
         .on(
           "postgres_changes",
@@ -39,7 +39,7 @@ export function RealtimeNotifier() {
     }
 
     if (isSubteam) {
-      const ch = supabase
+      const ch = localDataApi
         .channel("rt-section-clear")
         .on(
           "postgres_changes",
@@ -59,7 +59,7 @@ export function RealtimeNotifier() {
     }
 
     return () => {
-      channels.forEach((c) => supabase.removeChannel(c));
+      channels.forEach((c) => localDataApi.removeChannel(c));
     };
   }, [roles.join(",")]);
 

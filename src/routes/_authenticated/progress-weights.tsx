@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,7 +50,7 @@ function ProgressWeightsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    const { data, error } = await localDataApi
       .from("progress_weights" as never)
       .select("*")
       .order("sort_order", { ascending: true });
@@ -83,7 +83,7 @@ function ProgressWeightsPage() {
     setSaving(true);
     try {
       for (const [key, patch] of changes) {
-        const { error } = await supabase
+        const { error } = await localDataApi
           .from("progress_weights" as never)
           .update({ ...patch, updated_at: new Date().toISOString() } as never)
           .eq("key", key);
@@ -111,7 +111,7 @@ function ProgressWeightsPage() {
       for (const r of rows) {
         const def = DEFAULTS[r.key];
         if (def === undefined) continue;
-        const { error } = await supabase
+        const { error } = await localDataApi
           .from("progress_weights" as never)
           .update({ weight: def, is_active: true, updated_at: new Date().toISOString() } as never)
           .eq("key", r.key);
@@ -131,7 +131,7 @@ function ProgressWeightsPage() {
     if (!confirm("Hitung ulang progress SEMUA peserta? Ini bisa beberapa menit jika data besar.")) return;
     setRecalcing(true);
     try {
-      const { data, error } = await supabase.rpc("recompute_selection_progress" as never, { p_selection_id: null } as never);
+      const { data, error } = await localDataApi.rpc("recompute_selection_progress" as never, { p_selection_id: null } as never);
       if (error) throw error;
       toast.success(`Recompute selesai: ${data ?? 0} peserta`);
     } catch (e) {

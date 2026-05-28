@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,7 @@ function ImportHistoryPage() {
   const [rbBusy, setRbBusy] = useState(false);
 
   async function load() {
-    supabase
+    localDataApi
       .from("import_sessions")
       .select("id,file_name,status,total_rows,success_rows,failed_rows,warning_rows,skipped_rows,import_strategy,created_at,selection_id,rolled_back_at,rolled_back_reason,candidates_deleted,exams_deleted")
       .order("created_at", { ascending: false })
@@ -57,7 +57,7 @@ function ImportHistoryPage() {
     if (!rbReason.trim()) { toast.error("Alasan rollback wajib diisi"); return; }
     setRbBusy(true);
     try {
-      const { data, error } = await supabase.rpc("rollback_import_session" as never, {
+      const { data, error } = await localDataApi.rpc("rollback_import_session" as never, {
         p_session_id: rbTarget.id,
         p_reason: rbReason.trim(),
       } as never);

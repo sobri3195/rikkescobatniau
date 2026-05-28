@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -61,7 +61,7 @@ export function LinkParticipantDialog({
       setLinkedProfile(null);
       return;
     }
-    const { data: p } = await supabase
+    const { data: p } = await localDataApi
       .from("profiles")
       .select("auth_user_id, full_name, email, nrp_nip")
       .eq("auth_user_id", currentLinkedUserId)
@@ -70,7 +70,7 @@ export function LinkParticipantDialog({
       setLinkedProfile(null);
       return;
     }
-    const { data: r } = await supabase.from("user_roles").select("role").eq("user_id", currentLinkedUserId);
+    const { data: r } = await localDataApi.from("user_roles").select("role").eq("user_id", currentLinkedUserId);
     setLinkedProfile({ ...(p as any), roles: (r ?? []).map((x: any) => x.role) });
   }
 
@@ -83,7 +83,7 @@ export function LinkParticipantDialog({
     setLoading(true);
     try {
       // Only show users with peserta/casis role
-      const { data: roleRows } = await supabase
+      const { data: roleRows } = await localDataApi
         .from("user_roles")
         .select("user_id, role")
         .in("role", ["peserta", "casis"]);
@@ -92,7 +92,7 @@ export function LinkParticipantDialog({
         setResults([]);
         return;
       }
-      const { data: profs } = await supabase
+      const { data: profs } = await localDataApi
         .from("profiles")
         .select("auth_user_id, full_name, email, nrp_nip")
         .in("auth_user_id", eligibleIds)
@@ -122,7 +122,7 @@ export function LinkParticipantDialog({
     setSaving(true);
     try {
       // Ensure no other candidate is already linked to this user
-      const { data: existing } = await supabase
+      const { data: existing } = await localDataApi
         .from("candidates")
         .select("id, full_name")
         .eq("linked_user_id", userId)
@@ -132,7 +132,7 @@ export function LinkParticipantDialog({
         toast.error(`Akun ini sudah tertaut ke peserta lain: ${(existing as any).full_name}`);
         return;
       }
-      const { error } = await supabase
+      const { error } = await localDataApi
         .from("candidates")
         .update({ linked_user_id: userId })
         .eq("id", candidateId);
@@ -158,7 +158,7 @@ export function LinkParticipantDialog({
     if (!confirm("Lepaskan tautan akun peserta dari kandidat ini?")) return;
     setSaving(true);
     try {
-      const { error } = await supabase
+      const { error } = await localDataApi
         .from("candidates")
         .update({ linked_user_id: null })
         .eq("id", candidateId);

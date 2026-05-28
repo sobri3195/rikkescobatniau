@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { useAuth } from "@/lib/use-auth";
 import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
@@ -56,7 +56,7 @@ function QATestCasesPage() {
 
   async function load() {
     setLoading(true);
-    const { data } = await supabase
+    const { data } = await localDataApi
       .from("qa_test_cases")
       .select("*")
       .order("test_case_code");
@@ -78,7 +78,7 @@ function QATestCasesPage() {
   async function duplicateCase(tc: TC) {
     if (!canManage) return;
     const newCode = `${tc.test_case_code}-COPY-${Date.now().toString().slice(-4)}`;
-    const { error } = await supabase.from("qa_test_cases").insert({
+    const { error } = await localDataApi.from("qa_test_cases").insert({
       test_case_code: newCode,
       title: `${tc.title} (copy)`,
       module: tc.module,
@@ -99,7 +99,7 @@ function QATestCasesPage() {
 
   async function deprecate(tc: TC) {
     if (!canManage) return;
-    const { error } = await supabase.from("qa_test_cases").update({ status: "Deprecated" }).eq("id", tc.id);
+    const { error } = await localDataApi.from("qa_test_cases").update({ status: "Deprecated" }).eq("id", tc.id);
     if (error) return toast.error(error.message);
     toast.success("Test case di-deprecate");
     logAudit({ action: "deprecate_test_case", module: "qa", record_id: tc.id });
@@ -252,12 +252,12 @@ function EditDialog({ tc, onClose, onSaved }: { tc: TC; onClose: () => void; onS
         status: form.status,
       };
       if (isNew) {
-        const { error } = await supabase.from("qa_test_cases").insert(payload);
+        const { error } = await localDataApi.from("qa_test_cases").insert(payload);
         if (error) throw error;
         logAudit({ action: "create_test_case", module: "qa" });
         toast.success("Test case dibuat");
       } else {
-        const { error } = await supabase.from("qa_test_cases").update(payload).eq("id", tc.id);
+        const { error } = await localDataApi.from("qa_test_cases").update(payload).eq("id", tc.id);
         if (error) throw error;
         logAudit({ action: "update_test_case", module: "qa", record_id: tc.id, before: tc, after: payload });
         toast.success("Test case diupdate");
@@ -325,28 +325,28 @@ function RunDialog({ tc, onClose }: { tc: TC; onClose: () => void }) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    supabase.from("uat_sessions").select("id,session_name,status").in("status", ["Active", "Draft"])
+    localDataApi.from("uat_sessions").select("id,session_name,status").in("status", ["Active", "Draft"])
       .then((r) => setSessions(r.data ?? []));
   }, []);
 
   async function submit() {
     setSaving(true);
     try {
-      const { data: run, error } = await supabase.from("qa_test_runs").insert({
+      const { data: run, error } = await localDataApi.from("qa_test_runs").insert({
         test_case_id: tc.id,
         uat_session_id: sessionId === "none" ? null : sessionId,
         result,
         actual_result: actual,
         evidence_url: evidence,
         notes,
-        run_by: (await supabase.auth.getUser()).data.user?.id,
+        run_by: (await localDataApi.auth.getUser()).data.user?.id,
       }).select().single();
       if (error) throw error;
       logAudit({ action: `run_test_case_${result.toLowerCase()}`, module: "qa", record_id: tc.id, after: { result, actual } });
 
       if (createIssue && result === "Failed") {
         const code = `ISS-${Date.now().toString().slice(-6)}`;
-        const { data: iss } = await supabase.from("qa_issues").insert({
+        const { data: iss } = await localDataApi.from("qa_issues").insert({
           issue_code: code,
           title: `Failed: ${tc.title}`,
           description: `Test case ${tc.test_case_code} gagal.\n\nActual: ${actual}\nNotes: ${notes}`,
@@ -358,10 +358,10 @@ function RunDialog({ tc, onClose }: { tc: TC; onClose: () => void }) {
           expected_result: tc.expected_result,
           actual_result: actual,
           evidence_url: evidence,
-          reported_by: (await supabase.auth.getUser()).data.user?.id,
+          reported_by: (await localDataApi.auth.getUser()).data.user?.id,
         }).select().single();
         if (iss) {
-          await supabase.from("qa_test_runs").update({ linked_issue_id: iss.id }).eq("id", run.id);
+          await localDataApi.from("qa_test_runs").update({ linked_issue_id: iss.id }).eq("id", run.id);
           logAudit({ action: "create_issue_from_test", module: "qa", record_id: iss.id });
         }
       }

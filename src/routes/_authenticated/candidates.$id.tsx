@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -97,16 +97,16 @@ function CandidateDetail() {
   const canLinkAcct = ["super_admin", "admin", "registrasi"].some((r) => roles.includes(r));
 
   async function load() {
-    const { data: c } = await supabase.from("candidates").select("*").eq("id", id).maybeSingle();
+    const { data: c } = await localDataApi.from("candidates").select("*").eq("id", id).maybeSingle();
     setCand(c ?? null);
-    const { data: e } = await supabase.from("exams").select("*").eq("candidate_id", id).maybeSingle();
+    const { data: e } = await localDataApi.from("exams").select("*").eq("candidate_id", id).maybeSingle();
     setExam(e);
     if (e) {
-      const { data: s } = await supabase.from("exam_sections").select("*").eq("exam_id", e.id);
+      const { data: s } = await localDataApi.from("exam_sections").select("*").eq("exam_id", e.id);
       setSections((s ?? []) as Section[]);
-      const { data: m } = await supabase.from("medical_measurements").select("*").eq("exam_id", e.id).maybeSingle();
+      const { data: m } = await localDataApi.from("medical_measurements").select("*").eq("exam_id", e.id).maybeSingle();
       setMm(m);
-      const { data: sm } = await supabase.from("medical_summary").select("*").eq("exam_id", e.id).maybeSingle();
+      const { data: sm } = await localDataApi.from("medical_summary").select("*").eq("exam_id", e.id).maybeSingle();
       setMs(sm);
     }
   }
@@ -182,8 +182,8 @@ function CandidateDetail() {
     if (!exam) return;
     if (!summary.readiness.ok) return toast.error("Belum siap finalisasi. Periksa tab Readiness.");
     if (summary.finalRes === "Belum Lengkap") return toast.error("Data belum lengkap");
-    const { data: u } = await supabase.auth.getUser();
-    await supabase
+    const { data: u } = await localDataApi.auth.getUser();
+    await localDataApi
       .from("exams")
       .update({
         exam_status: "Finalized",
@@ -191,7 +191,7 @@ function CandidateDetail() {
         finalized_at: new Date().toISOString(),
       })
       .eq("id", exam.id);
-    await supabase.from("exam_sections").update({ section_status: "Locked", locked_at: new Date().toISOString() }).eq("exam_id", exam.id);
+    await localDataApi.from("exam_sections").update({ section_status: "Locked", locked_at: new Date().toISOString() }).eq("exam_id", exam.id);
     await logAudit({ action: "finalize", module: "exams", record_id: exam.id, candidate_id: id });
     toast.success("Pemeriksaan difinalisasi");
     await load();
@@ -385,7 +385,7 @@ function MeasurementsCard({ mm, examId, onSaved }: { mm: any; examId?: string; o
   const bmiClass = classifyBMI(bmi);
 
   async function save() {
-    await supabase
+    await localDataApi
       .from("medical_measurements")
       .update({
         height_cm: Number(h) || null,
@@ -531,7 +531,7 @@ function SectionEditor({
     }
     setSaving(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
+      const { data: u } = await localDataApi.auth.getUser();
       const patch: any = {
         findings,
         notes: buildNotes(),
@@ -548,7 +548,7 @@ function SectionEditor({
         patch.approved_by = u.user?.id;
         patch.approved_at = new Date().toISOString();
       }
-      const { error } = await supabase.from("exam_sections").update(patch).eq("id", section.id);
+      const { error } = await localDataApi.from("exam_sections").update(patch).eq("id", section.id);
       if (error) throw error;
       await logAudit({
         action: newStatus ? `section_${newStatus.toLowerCase()}` : "section_save",
@@ -844,7 +844,7 @@ function ResumePanel({
         pra_pantukhir_result: pra,
         suggestions: sugg,
       };
-      const { error } = await supabase.from("medical_summary").update(after).eq("id", ms.id);
+      const { error } = await localDataApi.from("medical_summary").update(after).eq("id", ms.id);
       if (error) throw error;
       await logAudit({
         action: "update_resume",

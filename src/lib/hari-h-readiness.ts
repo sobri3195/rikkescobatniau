@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 
 const CLEARED = new Set(["Submitted", "Approved", "Locked", "Cleared"]);
 
@@ -20,10 +20,10 @@ export async function checkHariHReadiness(
   let candidate: any = null;
 
   if (args.examId) {
-    const { data } = await supabase.from("exams").select("*").eq("id", args.examId).maybeSingle();
+    const { data } = await localDataApi.from("exams").select("*").eq("id", args.examId).maybeSingle();
     exam = data;
     if (exam?.candidate_id) {
-      const { data: c } = await supabase
+      const { data: c } = await localDataApi
         .from("candidates")
         .select("*")
         .eq("id", exam.candidate_id)
@@ -31,13 +31,13 @@ export async function checkHariHReadiness(
       candidate = c;
     }
   } else if (args.candidateId) {
-    const { data: c } = await supabase
+    const { data: c } = await localDataApi
       .from("candidates")
       .select("*")
       .eq("id", args.candidateId)
       .maybeSingle();
     candidate = c;
-    const { data: e } = await supabase
+    const { data: e } = await localDataApi
       .from("exams")
       .select("*")
       .eq("candidate_id", args.candidateId)

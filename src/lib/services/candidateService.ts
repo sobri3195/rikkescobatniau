@@ -5,6 +5,7 @@ import {
   ensureExamForCandidateLocal,
 } from "@/lib/services/examService";
 import { buildParticipantRowLocal } from "@/lib/services/participantRowService";
+import { syncCandidateRelationsLocal } from "@/lib/services/syncService";
 
 function generateTemporaryId(db: any) {
   const d = new Date();
@@ -101,6 +102,7 @@ export function createCandidateLocal(input: any) {
   db.candidates.push(candidate);
   saveDb(db);
   createExamForCandidateLocal(candidate);
+  syncCandidateRelationsLocal(candidate.id);
   addAuditLogLocal("create_candidate_local", {
     candidate_id: candidate.id,
     selection_id: candidate.selection_id,
@@ -170,7 +172,9 @@ export function updateCandidateLocal(id: string, patch: any) {
     },
   ];
 
-  saveDb(db);
+  saveDb(db, "updateCandidateLocal");
+  ensureExamForCandidateLocal(id);
+  syncCandidateRelationsLocal(id);
   return next;
 }
 export function softDeleteCandidateLocal(id: string) {

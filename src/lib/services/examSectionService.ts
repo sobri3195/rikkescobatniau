@@ -7,7 +7,10 @@ import {
   saveDb,
 } from "@/lib/localDb";
 import { addAuditLogLocal } from "@/lib/services/auditService";
-import { recalcExamProgressLocal } from "@/lib/services/examService";
+import {
+  recalculateExamProgressLocal,
+  recalculateHariHStageLocal,
+} from "@/lib/services/examService";
 
 const DEFAULT_SECTIONS = DEFAULT_EXAM_SECTIONS;
 
@@ -226,13 +229,15 @@ export function persistExamSectionLocal(
     (s: any) => s.exam_id === examId && s.is_required !== false,
   );
   const completed = sections.filter((s: any) =>
-    ["Submitted", "Approved", "Locked"].includes(s.section_status),
+    ["Submitted", "Approved", "Locked", "Selesai"].includes(s.section_status),
   ).length;
   exam.progress_total_count = sections.length;
   exam.progress_completed_count = completed;
   exam.progress_percentage = sections.length ? Math.round((completed / sections.length) * 100) : 0;
   exam.updated_at = now;
-  saveDb(db);
+  saveDb(db, "persistExamSectionLocal");
+  recalculateExamProgressLocal(examId);
+  recalculateHariHStageLocal(examId);
   return row;
 }
 
@@ -243,8 +248,9 @@ export function updateSectionLocal(examId: string, sectionKey: string, patch: an
   );
   if (!row) return null;
   Object.assign(row, patch, { updated_at: nowIso() });
-  saveDb(db);
-  recalcExamProgressLocal(examId);
+  saveDb(db, "updateSectionLocal");
+  recalculateExamProgressLocal(examId);
+  recalculateHariHStageLocal(examId);
   return row;
 }
 
@@ -262,4 +268,8 @@ export function returnSectionToDraftLocal(examId: string, sectionKey: string) {
   return row;
 }
 
-export { recalcExamProgressLocal };
+export {
+  recalculateExamProgressLocal,
+  recalculateExamProgressLocal as recalcExamProgressLocal,
+  recalculateHariHStageLocal,
+};

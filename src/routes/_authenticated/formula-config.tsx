@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { useAuth } from "@/lib/use-auth";
 import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
@@ -33,7 +33,7 @@ function FormulaConfigPage() {
   const [loading, setLoading] = useState(false);
 
   async function refreshList() {
-    const { data } = await supabase
+    const { data } = await localDataApi
       .from("formula_rule_sets")
       .select("id,rule_set_name,version,status,is_default,description,activated_at")
       .order("created_at", { ascending: false });
@@ -55,8 +55,8 @@ function FormulaConfigPage() {
 
   async function duplicate() {
     if (!rs) return;
-    const { data: u } = await supabase.auth.getUser();
-    const { data, error } = await supabase.from("formula_rule_sets").insert({
+    const { data: u } = await localDataApi.auth.getUser();
+    const { data, error } = await localDataApi.from("formula_rule_sets").insert({
       rule_set_name: `${rs.rule_set_name} (Copy)`,
       description: `Duplicate of ${rs.rule_set_name} v${rs.version}`,
       version: 1,
@@ -68,13 +68,13 @@ function FormulaConfigPage() {
     // Copy children
     const newId = data.id;
     const tasks: PromiseLike<any>[] = [];
-    if (rs.bmi.length) tasks.push(supabase.from("bmi_rules").insert(rs.bmi.map(({ id, ...x }: any) => ({ ...x, rule_set_id: newId }))));
-    if (rs.kesum.length) tasks.push(supabase.from("kesum_rule_configs").insert(rs.kesum.map(({ id, ...x }: any) => ({ ...x, rule_set_id: newId }))));
-    tasks.push(supabase.from("keswa_rule_configs").insert({ ...rs.keswa, rule_set_id: newId }));
-    if (rs.finalRules.length) tasks.push(supabase.from("final_result_rules").insert(rs.finalRules.map(({ id, ...x }: any) => ({ ...x, rule_set_id: newId }))));
-    if (rs.scoring.length) tasks.push(supabase.from("scoring_rules").insert(rs.scoring.map(({ id, ...x }: any) => ({ ...x, rule_set_id: newId }))));
-    if (rs.stakes.length) tasks.push(supabase.from("stakes_configs").insert(rs.stakes.map(({ id, ...x }: any) => ({ ...x, rule_set_id: newId, source_section_keys_json: x.source_section_keys_json }))));
-    if (rs.severity.length) tasks.push(supabase.from("classification_ranks").insert(rs.severity.map(({ id, ...x }: any) => ({ ...x, rule_set_id: newId }))));
+    if (rs.bmi.length) tasks.push(localDataApi.from("bmi_rules").insert(rs.bmi.map(({ id, ...x }: any) => ({ ...x, rule_set_id: newId }))));
+    if (rs.kesum.length) tasks.push(localDataApi.from("kesum_rule_configs").insert(rs.kesum.map(({ id, ...x }: any) => ({ ...x, rule_set_id: newId }))));
+    tasks.push(localDataApi.from("keswa_rule_configs").insert({ ...rs.keswa, rule_set_id: newId }));
+    if (rs.finalRules.length) tasks.push(localDataApi.from("final_result_rules").insert(rs.finalRules.map(({ id, ...x }: any) => ({ ...x, rule_set_id: newId }))));
+    if (rs.scoring.length) tasks.push(localDataApi.from("scoring_rules").insert(rs.scoring.map(({ id, ...x }: any) => ({ ...x, rule_set_id: newId }))));
+    if (rs.stakes.length) tasks.push(localDataApi.from("stakes_configs").insert(rs.stakes.map(({ id, ...x }: any) => ({ ...x, rule_set_id: newId, source_section_keys_json: x.source_section_keys_json }))));
+    if (rs.severity.length) tasks.push(localDataApi.from("classification_ranks").insert(rs.severity.map(({ id, ...x }: any) => ({ ...x, rule_set_id: newId }))));
     await Promise.all(tasks);
     await logAudit({ action: "duplicate_rule_set", module: "formula", record_id: newId, before: { source: rs.id } });
     toast.success("Rule set diduplikat sebagai Draft");
@@ -86,8 +86,8 @@ function FormulaConfigPage() {
     if (!rs) return;
     const errs = issues.filter((i) => i.level === "error");
     if (errs.length) { toast.error(`Validasi gagal: ${errs[0].msg}`); return; }
-    const { data: u } = await supabase.auth.getUser();
-    const { error } = await supabase.from("formula_rule_sets")
+    const { data: u } = await localDataApi.auth.getUser();
+    const { error } = await localDataApi.from("formula_rule_sets")
       .update({ status: "Active", activated_at: new Date().toISOString(), activated_by: u.user?.id })
       .eq("id", rs.id);
     if (error) { toast.error(error.message); return; }
@@ -99,8 +99,8 @@ function FormulaConfigPage() {
 
   async function archive() {
     if (!rs) return;
-    const { data: u } = await supabase.auth.getUser();
-    await supabase.from("formula_rule_sets")
+    const { data: u } = await localDataApi.auth.getUser();
+    await localDataApi.from("formula_rule_sets")
       .update({ status: "Archived", archived_at: new Date().toISOString(), archived_by: u.user?.id })
       .eq("id", rs.id);
     await logAudit({ action: "archive_rule_set", module: "formula", record_id: rs.id });
@@ -112,28 +112,28 @@ function FormulaConfigPage() {
   async function saveAll() {
     if (!rs || !isDraft) return;
     // Update header
-    await supabase.from("formula_rule_sets").update({
+    await localDataApi.from("formula_rule_sets").update({
       rule_set_name: rs.rule_set_name,
       description: (rs as any).description ?? null,
     }).eq("id", rs.id);
     // Diff replace: simplest reliable approach — delete & re-insert children.
     await Promise.all([
-      supabase.from("bmi_rules").delete().eq("rule_set_id", rs.id),
-      supabase.from("kesum_rule_configs").delete().eq("rule_set_id", rs.id),
-      supabase.from("final_result_rules").delete().eq("rule_set_id", rs.id),
-      supabase.from("scoring_rules").delete().eq("rule_set_id", rs.id),
-      supabase.from("stakes_configs").delete().eq("rule_set_id", rs.id),
-      supabase.from("classification_ranks").delete().eq("rule_set_id", rs.id),
-      supabase.from("keswa_rule_configs").delete().eq("rule_set_id", rs.id),
+      localDataApi.from("bmi_rules").delete().eq("rule_set_id", rs.id),
+      localDataApi.from("kesum_rule_configs").delete().eq("rule_set_id", rs.id),
+      localDataApi.from("final_result_rules").delete().eq("rule_set_id", rs.id),
+      localDataApi.from("scoring_rules").delete().eq("rule_set_id", rs.id),
+      localDataApi.from("stakes_configs").delete().eq("rule_set_id", rs.id),
+      localDataApi.from("classification_ranks").delete().eq("rule_set_id", rs.id),
+      localDataApi.from("keswa_rule_configs").delete().eq("rule_set_id", rs.id),
     ]);
     const tasks: PromiseLike<any>[] = [];
-    if (rs.bmi.length) tasks.push(supabase.from("bmi_rules").insert(rs.bmi.map(({ id, ...x }: any, i) => ({ ...x, rule_set_id: rs.id, sort_order: i }))));
-    if (rs.kesum.length) tasks.push(supabase.from("kesum_rule_configs").insert(rs.kesum.map(({ id, ...x }: any, i) => ({ ...x, rule_set_id: rs.id, sort_order: i }))));
-    tasks.push(supabase.from("keswa_rule_configs").insert({ ...rs.keswa, rule_set_id: rs.id }));
-    if (rs.finalRules.length) tasks.push(supabase.from("final_result_rules").insert(rs.finalRules.map(({ id, ...x }: any) => ({ ...x, rule_set_id: rs.id }))));
-    if (rs.scoring.length) tasks.push(supabase.from("scoring_rules").insert(rs.scoring.map(({ id, ...x }: any) => ({ ...x, rule_set_id: rs.id }))));
-    if (rs.stakes.length) tasks.push(supabase.from("stakes_configs").insert(rs.stakes.map(({ id, ...x }: any, i) => ({ ...x, rule_set_id: rs.id, sort_order: i }))));
-    if (rs.severity.length) tasks.push(supabase.from("classification_ranks").insert(rs.severity.map(({ id, ...x }: any) => ({ ...x, rule_set_id: rs.id }))));
+    if (rs.bmi.length) tasks.push(localDataApi.from("bmi_rules").insert(rs.bmi.map(({ id, ...x }: any, i) => ({ ...x, rule_set_id: rs.id, sort_order: i }))));
+    if (rs.kesum.length) tasks.push(localDataApi.from("kesum_rule_configs").insert(rs.kesum.map(({ id, ...x }: any, i) => ({ ...x, rule_set_id: rs.id, sort_order: i }))));
+    tasks.push(localDataApi.from("keswa_rule_configs").insert({ ...rs.keswa, rule_set_id: rs.id }));
+    if (rs.finalRules.length) tasks.push(localDataApi.from("final_result_rules").insert(rs.finalRules.map(({ id, ...x }: any) => ({ ...x, rule_set_id: rs.id }))));
+    if (rs.scoring.length) tasks.push(localDataApi.from("scoring_rules").insert(rs.scoring.map(({ id, ...x }: any) => ({ ...x, rule_set_id: rs.id }))));
+    if (rs.stakes.length) tasks.push(localDataApi.from("stakes_configs").insert(rs.stakes.map(({ id, ...x }: any, i) => ({ ...x, rule_set_id: rs.id, sort_order: i }))));
+    if (rs.severity.length) tasks.push(localDataApi.from("classification_ranks").insert(rs.severity.map(({ id, ...x }: any) => ({ ...x, rule_set_id: rs.id }))));
     await Promise.all(tasks);
     await logAudit({ action: "update_rule_set", module: "formula", record_id: rs.id });
     toast.success("Draft tersimpan");

@@ -13,7 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { SECTIONS } from "@/lib/sections";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { isAnamnesisReadyForFinalization, getAnamnesisStage } from "@/lib/permissions/anamnesis-workflow";
 import { logAudit } from "@/lib/audit";
 import { toast } from "sonner";
@@ -58,7 +58,7 @@ export function FinalizationDialog({
 
   useEffect(() => {
     if (!open || !exam?.id) return;
-    supabase
+    localDataApi
       .from("medical_history_forms")
       .select("anamnesis_workflow_status, patient_signature_url, candidate_signature_url, doctor_signature_url, doctor_review_status")
       .eq("exam_id", exam.id)
@@ -153,8 +153,8 @@ export function FinalizationDialog({
         setBusy(false);
         return;
       }
-      const { data: u } = await supabase.auth.getUser();
-      const { error: e1 } = await supabase
+      const { data: u } = await localDataApi.auth.getUser();
+      const { error: e1 } = await localDataApi
         .from("exams")
         .update({
           exam_status: "Finalized",
@@ -163,7 +163,7 @@ export function FinalizationDialog({
         })
         .eq("id", exam.id);
       if (e1) throw e1;
-      const { error: e2 } = await supabase
+      const { error: e2 } = await localDataApi
         .from("exam_sections")
         .update({
           section_status: "Locked",

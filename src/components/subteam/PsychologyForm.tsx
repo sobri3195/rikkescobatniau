@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -94,7 +94,7 @@ export function PsychologyForm({ examId, candidateId, readOnly, canEditAfterSubm
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const { data } = await supabase.from("exam_psychology").select("*").eq("exam_id", examId).maybeSingle();
+    const { data } = await localDataApi.from("exam_psychology").select("*").eq("exam_id", examId).maybeSingle();
     setRow(data ?? { status: "Draft" });
   }
   useEffect(() => { if (examId) load(); }, [examId]);
@@ -135,7 +135,7 @@ export function PsychologyForm({ examId, candidateId, readOnly, canEditAfterSubm
     }
     setBusy(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
+      const { data: u } = await localDataApi.auth.getUser();
       const payload: any = {
         exam_id: examId, candidate_id: candidateId,
         // New Keswa fields
@@ -167,8 +167,8 @@ export function PsychologyForm({ examId, candidateId, readOnly, canEditAfterSubm
         examiner_id: u.user?.id, examined_at: new Date().toISOString(), status,
       };
       const q = row?.id
-        ? supabase.from("exam_psychology").update(payload).eq("id", row.id)
-        : supabase.from("exam_psychology").insert(payload);
+        ? localDataApi.from("exam_psychology").update(payload).eq("id", row.id)
+        : localDataApi.from("exam_psychology").insert(payload);
       const { error } = await q;
       if (error) throw error;
 

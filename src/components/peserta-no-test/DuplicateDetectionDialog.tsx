@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, GitMerge, Users, AlertTriangle } from "lucide-react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { toast } from "sonner";
 import { useServerFn } from "@/shims/tanstack-react-start";
 import { mergeCandidates } from "@/lib/peserta-no-test/merge.functions";
@@ -47,7 +47,7 @@ export function DuplicateDetectionDialog({
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    supabase
+    localDataApi
       .from("candidates")
       .select("id, full_name, nrp_nip, birth_date, test_number, temporary_id, rank, unit_position")
       .is("deleted_at", null)

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -291,12 +291,12 @@ function RekapAplikasiPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [c, e, s, m, ms, sl] = await Promise.all([
-      supabase.from("candidates").select("*").is("deleted_at", null).order("serial_number"),
-      supabase.from("exams").select("*"),
-      supabase.from("exam_sections").select("exam_id,candidate_id,section_key,section_name,section_status,classification,findings,notes"),
-      supabase.from("medical_measurements").select("*"),
-      supabase.from("medical_summary").select("*"),
-      supabase.from("selections").select("id,name,year_label").order("created_at", { ascending: false }),
+      localDataApi.from("candidates").select("*").is("deleted_at", null).order("serial_number"),
+      localDataApi.from("exams").select("*"),
+      localDataApi.from("exam_sections").select("exam_id,candidate_id,section_key,section_name,section_status,classification,findings,notes"),
+      localDataApi.from("medical_measurements").select("*"),
+      localDataApi.from("medical_summary").select("*"),
+      localDataApi.from("selections").select("id,name,year_label").order("created_at", { ascending: false }),
     ]);
     const cands = (c.data ?? []) as Cand[];
     const exams = (e.data ?? []) as Exam[];
@@ -389,14 +389,14 @@ function RekapAplikasiPage() {
       if (debounce) clearTimeout(debounce);
       debounce = setTimeout(() => { load(); }, 800);
     };
-    const channel = supabase
+    const channel = localDataApi
       .channel("rekap-aplikasi-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "rikkes_form_sections" }, trigger)
       .on("postgres_changes", { event: "*", schema: "public", table: "exam_sections" }, trigger)
       .on("postgres_changes", { event: "*", schema: "public", table: "medical_summary" }, trigger)
       .on("postgres_changes", { event: "*", schema: "public", table: "exams" }, trigger)
       .subscribe();
-    return () => { if (debounce) clearTimeout(debounce); supabase.removeChannel(channel); };
+    return () => { if (debounce) clearTimeout(debounce); localDataApi.removeChannel(channel); };
   }, [load]);
 
   const pokOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.candidate.pok_korp).filter(Boolean))) as string[], [rows]);
@@ -485,9 +485,9 @@ function RekapAplikasiPage() {
   }
 
   async function handleMarkReview(r: Row, reason: string) {
-    const { data: u } = await supabase.auth.getUser();
+    const { data: u } = await localDataApi.auth.getUser();
     if (!u.user) return;
-    const { error } = await supabase.from("review_marks").insert({
+    const { error } = await localDataApi.from("review_marks").insert({
       candidate_id: r.candidate.id, exam_id: r.exam?.id ?? null,
       marked_by: u.user.id, reason, status: "open",
     });
@@ -949,7 +949,7 @@ function SidePanel({ row, onChanged, onClose }: { row: Row; onChanged: () => voi
       rakor_result: rakor || null, pra_pantukhir_result: pra || null,
       suggestions: suggestions || null,
     };
-    const { error } = await supabase.from("medical_summary").update(patch).eq("id", ms.id);
+    const { error } = await localDataApi.from("medical_summary").update(patch).eq("id", ms.id);
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     await logAudit({

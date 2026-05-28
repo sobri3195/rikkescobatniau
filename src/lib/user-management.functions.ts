@@ -1,6 +1,6 @@
 import { createServerFn } from "@/shims/tanstack-react-start";
-import { requireSupabaseAuth } from "@/lib/local-auth-middleware";
-import { supabaseAdmin } from "@/lib/local-supabase-shim.server";
+import { requireLocalAuth } from "@/lib/local-auth-middleware";
+import { localAdminApi } from "@/lib/localDataApi.server";
 import { z } from "zod";
 
 const ALL_ROLES = [
@@ -17,8 +17,8 @@ const ALL_ROLES = [
   "viewer",
 ] as const;
 
-async function assertSuperAdmin(supabase: any, userId: string) {
-  const { data, error } = await supabase
+async function assertSuperAdmin(localDataApi: any, userId: string) {
+  const { data, error } = await localDataApi
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
@@ -36,7 +36,7 @@ async function writeAudit(args: {
   before?: any;
   after?: any;
 }) {
-  await supabaseAdmin.from("audit_logs").insert({
+  await localAdminApi.from("audit_logs").insert({
     user_id: args.userId,
     action: args.action,
     module: "user_management",
@@ -47,7 +47,7 @@ async function writeAudit(args: {
 }
 
 export const createUserAccount = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireLocalAuth])
   .inputValidator((input: unknown) =>
     z
       .object({
@@ -61,9 +61,9 @@ export const createUserAccount = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
-    await assertSuperAdmin(context.supabase, context.userId);
+    await assertSuperAdmin(context.localDataApi, context.userId);
 
-    const created = await supabaseAdmin.auth.admin.createUser({
+    const created = await localAdminApi.auth.admin.createUser({
       email: data.email,
       password: data.password,
       email_confirm: true,
@@ -75,23 +75,21 @@ export const createUserAccount = createServerFn({ method: "POST" })
     const newUserId = created.data.user.id;
 
     // handle_new_user trigger creates a profile + default viewer role. Upsert overrides.
-    await supabaseAdmin
-      .from("profiles")
-      .upsert(
-        {
-          auth_user_id: newUserId,
-          full_name: data.full_name,
-          email: data.email,
-          rank: data.rank ?? null,
-          unit: data.unit ?? null,
-          is_active: true,
-        },
-        { onConflict: "auth_user_id" },
-      );
+    await localAdminApi.from("profiles").upsert(
+      {
+        auth_user_id: newUserId,
+        full_name: data.full_name,
+        email: data.email,
+        rank: data.rank ?? null,
+        unit: data.unit ?? null,
+        is_active: true,
+      },
+      { onConflict: "auth_user_id" },
+    );
 
     // Reset roles to requested set
-    await supabaseAdmin.from("user_roles").delete().eq("user_id", newUserId);
-    await supabaseAdmin
+    await localAdminApi.from("user_roles").delete().eq("user_id", newUserId);
+    await localAdminApi
       .from("user_roles")
       .insert(data.roles.map((role) => ({ user_id: newUserId, role })));
 
@@ -106,23 +104,21 @@ export const createUserAccount = createServerFn({ method: "POST" })
   });
 
 export const deleteUserAccount = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
-    z.object({ authUserId: z.string().uuid() }).parse(input),
-  )
+  .middleware([requireLocalAuth])
+  .inputValidator((input: unknown) => z.object({ authUserId: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
-    await assertSuperAdmin(context.supabase, context.userId);
+    await assertSuperAdmin(context.localDataApi, context.userId);
     if (data.authUserId === context.userId) {
       throw new Error("Tidak dapat menghapus akun sendiri");
     }
 
-    const { data: profile } = await supabaseAdmin
+    const { data: profile } = await localAdminApi
       .from("profiles")
       .select("full_name, email")
       .eq("auth_user_id", data.authUserId)
       .maybeSingle();
 
-    const del = await supabaseAdmin.auth.admin.deleteUser(data.authUserId);
+    const del = await localAdminApi.auth.admin.deleteUser(data.authUserId);
     if (del.error) throw new Error(del.error.message);
 
     await writeAudit({
@@ -136,7 +132,7 @@ export const deleteUserAccount = createServerFn({ method: "POST" })
   });
 
 export const resetUserPassword = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireLocalAuth])
   .inputValidator((input: unknown) =>
     z
       .object({
@@ -146,8 +142,8 @@ export const resetUserPassword = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
-    await assertSuperAdmin(context.supabase, context.userId);
-    const upd = await supabaseAdmin.auth.admin.updateUserById(data.authUserId, {
+    await assertSuperAdmin(context.localDataApi, context.userId);
+    const upd = await localAdminApi.auth.admin.updateUserById(data.authUserId, {
       password: data.newPassword,
     });
     if (upd.error) throw new Error(upd.error.message);

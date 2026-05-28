@@ -6,7 +6,7 @@
 // Rekap / Laporan / Export — without waiting for the participant to be
 // finalized, and without requiring every section to be complete.
 
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { recalculateExamSummary } from "@/lib/rikkes-calculations";
 
 /** Map a rikkes group_key to the legacy exam_sections.section_key list it represents. */
@@ -80,7 +80,7 @@ export async function syncGroupToRekap(args: {
 
       // Load existing exam_sections rows for these keys (rows are pre-seeded
       // by create_exam_for_candidate trigger, so we only update).
-      const { data: existing } = await supabase
+      const { data: existing } = await localDataApi
         .from("exam_sections")
         .select("id, section_key, classification, findings, notes")
         .eq("exam_id", examId)
@@ -95,10 +95,10 @@ export async function syncGroupToRekap(args: {
         if (notes) patch.notes = notes;
         if (status === "Submitted") patch.submitted_at = new Date().toISOString();
         if (row) {
-          await supabase.from("exam_sections").update(patch).eq("id", row.id);
+          await localDataApi.from("exam_sections").update(patch).eq("id", row.id);
         } else {
           // Fallback: insert if row missing (older exams without seeded sections).
-          await supabase.from("exam_sections").insert({
+          await localDataApi.from("exam_sections").insert({
             exam_id: examId,
             candidate_id: candidateId,
             section_key: key,

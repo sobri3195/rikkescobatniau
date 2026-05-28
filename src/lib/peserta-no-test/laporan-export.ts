@@ -2,7 +2,7 @@ import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { logAudit } from "@/lib/audit";
 
 type Row = {
@@ -18,7 +18,7 @@ type Row = {
 };
 
 async function loadRows(opts?: { selectionId?: string }): Promise<Row[]> {
-  let q = supabase
+  let q = localDataApi
     .from("candidates")
     .select("full_name, rank, nrp_nip, unit_position, temporary_id, test_number, test_number_status, created_at, selections(name)")
     .or("test_number.is.null,test_number.like.TMP-%")

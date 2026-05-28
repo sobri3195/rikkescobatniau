@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { useAuth } from "@/lib/use-auth";
 import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
@@ -67,7 +67,7 @@ function QAIssuesPage() {
 
   async function load() {
     setLoading(true);
-    const { data } = await supabase.from("qa_issues").select("*").order("created_at", { ascending: false });
+    const { data } = await localDataApi.from("qa_issues").select("*").order("created_at", { ascending: false });
     setIssues((data ?? []) as any);
     setLoading(false);
   }
@@ -183,7 +183,7 @@ function IssueDialog({ issue, onClose, onSaved }: { issue: Issue; onClose: () =>
   async function save() {
     setSaving(true);
     try {
-      const u = (await supabase.auth.getUser()).data.user;
+      const u = (await localDataApi.auth.getUser()).data.user;
       const wasResolved = ["Resolved", "Closed"].includes(f.status) && !issue.resolved_at;
       const payload: any = {
         issue_code: f.issue_code,
@@ -207,8 +207,8 @@ function IssueDialog({ issue, onClose, onSaved }: { issue: Issue; onClose: () =>
         payload.resolved_by = u?.id;
       }
       const { error } = isNew
-        ? await supabase.from("qa_issues").insert(payload)
-        : await supabase.from("qa_issues").update(payload).eq("id", issue.id);
+        ? await localDataApi.from("qa_issues").insert(payload)
+        : await localDataApi.from("qa_issues").update(payload).eq("id", issue.id);
       if (error) throw error;
       logAudit({
         action: isNew ? "create_issue" : (issue.status !== f.status ? `change_issue_status_${f.status.toLowerCase().replace(/\s/g,"_")}` : "update_issue"),

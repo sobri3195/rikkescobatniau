@@ -27,3 +27,24 @@ export function buildRekapRowsLocal(filters: { selection_id?: string | null } = 
       };
     });
 }
+
+export function buildRekapRowLocal(candidateId: string) {
+  const db = getDb() as any;
+  repairLocalDbRelations(db);
+  const candidate = (db.candidates ?? []).find(
+    (item: any) => item.id === candidateId && !item.is_deleted,
+  );
+  if (!candidate) return null;
+  return (
+    buildRekapRowsLocal({ selection_id: candidate.selection_id }).find(
+      (row: any) => row.candidate_id === candidateId,
+    ) ?? null
+  );
+}
+
+export function rebuildRekapCacheLocal() {
+  const db = getDb() as any;
+  const rows = buildRekapRowsLocal();
+  db.rekap_cache = rows;
+  return rows;
+}
