@@ -59,21 +59,28 @@ export function migrateLocalDb(input?: any): LocalDb {
 export function repairLocalDbRelations(inputDb?: any) {
   const db: any = inputDb ?? getDb();
   const now = nowIso();
+  db.selections = db.selections ?? [];
   db.candidates = db.candidates ?? [];
   db.exams = db.exams ?? [];
   db.exam_sections = db.exam_sections ?? [];
 
   for (const candidate of db.candidates) {
     if (candidate.is_deleted) continue;
-    if (!candidate.selection_id && db.settings?.active_selection_id) {
-      candidate.selection_id = db.settings.active_selection_id;
-      candidate.updated_at = now;
+    if (!candidate.selection_id) {
+      const defaultSelectionId = db.settings?.active_selection_id ?? db.selections?.[0]?.id;
+      if (defaultSelectionId) {
+        candidate.selection_id = defaultSelectionId;
+        candidate.updated_at = now;
+      }
     }
     const testNumber = String(candidate.test_number ?? "").trim();
     if (!testNumber && !String(candidate.temporary_id ?? "").trim()) {
       candidate.temporary_id = `TMP-${new Date().toISOString().slice(0,10).replace(/-/g,"")}-${String(Math.floor(Math.random()*9999)+1).padStart(4,"0")}`;
+      candidate.test_number_status = "pending";
+      candidate.no_test_missing = true;
       candidate.updated_at = now;
     }
+    if (candidate.is_deleted === undefined) candidate.is_deleted = false;
 
     let exam = db.exams.find((e: any) => e.candidate_id === candidate.id && !e.is_deleted);
     if (!exam) {
