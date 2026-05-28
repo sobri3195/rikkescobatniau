@@ -412,6 +412,7 @@ function RikkesDetail() {
               active={active}
               cand={cand}
               examId={currentExam?.id}
+              selectionLabel={selectionLabel}
               onSaveDraft={(d) => saveDraft(active, d)}
               onSubmit={(d) => submit(active, d)}
               canEditAfterSubmit={canEdit}
@@ -468,13 +469,14 @@ function FormHeader(props: {
   active: RikkesGroupKey;
   cand: any;
   examId: string | undefined;
+  selectionLabel?: string;
   onSaveDraft: (data: any) => void;
   onSubmit: (data: any) => void;
   canEditAfterSubmit?: boolean;
   onPersisted?: () => void;
   onSaveRevision?: (data: any, reason: string) => void | Promise<void>;
 }) {
-  const { groupLabel, status, canReturn, onReturn, data, readOnly, active, cand, examId, onSaveDraft, onSubmit, canEditAfterSubmit, onPersisted, onSaveRevision } = props;
+  const { groupLabel, status, canReturn, onReturn, data, readOnly, active, cand, examId, selectionLabel, onSaveDraft, onSubmit, canEditAfterSubmit, onPersisted, onSaveRevision } = props;
   const [formData, setFormData] = useState<any>(data ?? {});
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnReason, setReturnReason] = useState("");
