@@ -37,6 +37,14 @@ export default tseslint.config(
               name: "@/integrations/supabase/client",
               message: "Supabase client dilarang. Gunakan localDb/localStorage service.",
             },
+            {
+              name: "@/lib/local-supabase-shim",
+              message: "Supabase shim dilarang. Gunakan service localDb/localStorage.",
+            },
+            {
+              name: "@/lib/local-supabase-shim.server",
+              message: "Supabase shim dilarang. Gunakan service localDb/localStorage.",
+            },
           ],
           patterns: [
             {
