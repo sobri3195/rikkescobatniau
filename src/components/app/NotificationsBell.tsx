@@ -3,9 +3,11 @@ import { Bell, Check, CheckCheck } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { listNotifications } from "@/lib/services/notificationService";
+import { isLocalMode } from "@/lib/storage-mode";
 import { useAuth } from "@/lib/use-auth";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 type Notif = {
   id: string;
@@ -25,18 +27,18 @@ export function NotificationsBell() {
 
   async function load() {
     if (!user) return;
-    const { data } = await supabase
-      .from("notifications")
-      .select("id,type,title,body,link_url,read_at,created_at,metadata")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(20);
-    setItems((data ?? []) as Notif[]);
+    try {
+      const data = await listNotifications(user.id);
+      setItems((data ?? []) as Notif[]);
+    } catch {
+      setItems([]);
+    }
   }
 
   useEffect(() => {
     if (!user) return;
     load();
+    if (isLocalMode) return;
     const channel = supabase
       .channel(`notif-${user.id}`)
       .on(
@@ -56,14 +58,15 @@ export function NotificationsBell() {
   const unread = items.filter((n) => !n.read_at).length;
 
   async function markRead(id: string) {
-    await supabase.from("notifications").update({ read_at: new Date().toISOString() } as never).eq("id", id);
-    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n)));
+    const now = new Date().toISOString();
+    if (!isLocalMode) await supabase.from("notifications").update({ read_at: now } as never).eq("id", id);
+    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read_at: now } : n)));
   }
 
   async function markAllRead() {
     if (!user) return;
     const now = new Date().toISOString();
-    await supabase.from("notifications").update({ read_at: now } as never).eq("user_id", user.id).is("read_at", null);
+    if (!isLocalMode) await supabase.from("notifications").update({ read_at: now } as never).eq("user_id", user.id).is("read_at", null);
     setItems((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: now })));
   }
 

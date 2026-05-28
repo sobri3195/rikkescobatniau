@@ -1,6 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { isLocalMode } from "@/lib/storage-mode";
+import { LOCAL_SESSION_KEY } from "@/lib/localDb";
 import { Button } from "@/components/ui/button";
 import rikkesLogo from "@/assets/rikkes-logo.png";
 import {
@@ -25,6 +27,10 @@ function LandingPage() {
   const [authed, setAuthed] = useState(false);
 
   useEffect(() => {
+    if (isLocalMode) {
+      setAuthed(!!localStorage.getItem(LOCAL_SESSION_KEY));
+      return;
+    }
     supabase.auth.getSession().then(({ data }) => setAuthed(!!data.session));
   }, []);
 
