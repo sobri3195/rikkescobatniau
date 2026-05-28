@@ -1,0 +1,21 @@
+{
+  "name": "RIKKES TNI AU",
+  "short_name": "RIKKES",
+  "description": "Sistem Digital Pemeriksaan Kesehatan RIKKES TNI Angkatan Udara",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0b2f6b",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    }
+  ]
+}
