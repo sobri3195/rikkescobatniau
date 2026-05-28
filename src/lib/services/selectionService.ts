@@ -3,6 +3,7 @@ import {
   getDb,
   getLocalSession,
   nowIso,
+  requireLocalSession,
   setDb,
 } from "@/lib/localDb";
 
@@ -27,11 +28,7 @@ export function listActiveSelectionsLocal() {
 
 export function createSelectionLocal(input: any) {
   const db = getDb() as any;
-  const session = getLocalSession();
-
-  if (!session?.user_id) {
-    throw new Error("Session lokal tidak ditemukan. Silakan login ulang.");
-  }
+  const session = requireLocalSession();
 
   if (!["super_admin", "admin", "tester"].includes(session.role)) {
     throw new Error("Akun Anda tidak memiliki izin untuk membuat seleksi.");

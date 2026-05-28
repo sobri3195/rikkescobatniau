@@ -48,3 +48,15 @@ export function submitSectionLocal(examId: string, sectionKey: string, formData:
   addAuditLogLocal("submit_section_local", { exam_id: examId, section_key: sectionKey });
   return row;
 }
+
+export function returnSectionToDraftLocal(examId: string, sectionKey: string) {
+  const row = updateSectionLocal(examId, sectionKey, {
+    section_status: "Draft",
+    submitted_at: null,
+    submitted_by: null,
+  });
+  addAuditLogLocal("return_section_to_draft_local", { exam_id: examId, section_key: sectionKey });
+  return row;
+}
+
+export { recalcExamProgressLocal };
