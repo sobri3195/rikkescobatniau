@@ -301,6 +301,11 @@ function SelectionForm({ onDone, existing }: { onDone: () => void; existing?: Se
       if (String(code) === "42501" || /row-level security|permission/i.test(String(message))) {
         toast.error("Gagal membuat seleksi. Akun Anda belum memiliki izin untuk menambah seleksi.");
       } else {
+        if (message === "Session lokal tidak valid. Silakan login ulang.") {
+          toast.error(message);
+          window.location.href = "/login";
+          return;
+        }
         toast.error(message);
       }
       console.error("Selection mutation failed", {

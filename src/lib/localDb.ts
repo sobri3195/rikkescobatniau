@@ -114,6 +114,33 @@ export function getDisplayStatusLocal(examId: string, sectionKey: string, neuroR
   return "Draft";
 }
 
+
+
+export function getLocalSession() {
+  try {
+    const raw = localStorage.getItem(LOCAL_SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    localStorage.removeItem(LOCAL_SESSION_KEY);
+    return null;
+  }
+}
+
+export function requireLocalSession() {
+  const session = getLocalSession();
+
+  if (!session?.user_id) {
+    localStorage.removeItem(LOCAL_SESSION_KEY);
+    throw new Error("Session lokal tidak valid. Silakan login ulang.");
+  }
+
+  return session;
+}
+
+export function isAdminRole(role?: string) {
+  return ["super_admin", "admin", "tester"].includes(role ?? "");
+}
 export const localDb = {
   candidates: {
     list: () => getDb().candidates,
