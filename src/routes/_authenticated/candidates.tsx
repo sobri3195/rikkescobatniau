@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,10 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { logAudit } from "@/lib/audit";
 import { TableExportMenu } from "@/components/export/TableExportMenu";
 import { useAuth } from "@/lib/use-auth";
 import { DeletePersonnelDialog } from "@/components/app/DeletePersonnelDialog";
+import { createCandidateLocal, findDuplicateTestNumberLocal, listCandidatesLocal } from "@/lib/services/candidateService";
+import { listSelections, createSelection } from "@/lib/selectionService";
+import { getDb, saveDb } from "@/lib/localDb";
 
 export const Route = createFileRoute("/_authenticated/candidates")({
   component: CandidatesPage,
@@ -41,11 +42,9 @@ function CandidatesPage() {
   const canDelete = hasAnyRole(["super_admin", "tester"]);
 
   async function load() {
-    const [{ data: c }, { data: s }] = await Promise.all([
-      supabase.from("candidates").select("*").is("deleted_at", null).order("serial_number"),
-      supabase.from("selections").select("id,name,year_label"),
-    ]);
-    setCands((c ?? []) as Cand[]);
+    const c = listCandidatesLocal().filter((x: any) => !x.is_deleted);
+    const s = await listSelections();
+    setCands(c as Cand[]);
     setSels((s ?? []) as Sel[]);
   }
   useEffect(() => {
@@ -180,13 +179,15 @@ function CandidateForm({ selections, onDone }: { selections: Sel[]; onDone: () =
     const combined = `${form.full_name} ${form.rank ? `(${form.rank})` : ""} ${form.nrp_nip ?? ""}`.trim();
     const payload: any = { ...form, combined_identity: combined };
     if (!payload.birth_date) delete payload.birth_date;
-    const { data: cand, error } = await supabase.from("candidates").insert(payload).select().single();
-    if (error) return toast.error(error.message);
-    // exam + 25 sections + measurements + summary are created automatically
-    // by the create_exam_for_candidate() database trigger.
-    await logAudit({ action: "create", module: "candidates", record_id: cand.id, candidate_id: cand.id, after: cand });
-    toast.success("Peserta dibuat");
-    onDone();
+    try {
+      const duplicate = findDuplicateTestNumberLocal({ selectionId: form.selection_id, testNumber: form.test_number });
+      if (duplicate) throw new Error(`Nomor test sudah dipakai oleh ${duplicate.full_name ?? "peserta lain"}.`);
+      createCandidateLocal(payload);
+      toast.success("Peserta dibuat");
+      onDone();
+    } catch (error: any) {
+      toast.error(error?.message ?? "Gagal membuat peserta");
+    }
   }
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -255,29 +256,23 @@ const POK = ["TEK", "ADM", "LEK", "KES"];
 const PANDA = ["JAKARTA", "BANDUNG", "SURABAYA", "MEDAN"];
 
 async function seedDemo(reload: () => Promise<void>) {
-  let { data: sel } = await supabase.from("selections").select("id").limit(1).maybeSingle();
+  let sel = (await listSelections())[0] as any;
   if (!sel) {
-    const { data } = await supabase
-      .from("selections")
-      .insert({
+    sel = await createSelection({
         name: "SUSPAJEMEN A-36",
         year_label: "TA 2026",
         participant_label: "CALON PASIS",
         report_subtitle: "CALON PASIS SUSPAJEMEN A-36 TAHUN 2026",
         location: "Surakarta",
         status: "Aktif",
-      })
-      .select("id")
-      .single();
-    sel = data;
+      });
   }
   if (!sel) return toast.error("Gagal membuat seleksi demo");
 
   for (let i = 0; i < DEMO_NAMES.length; i++) {
     const [name, rank, nrp] = DEMO_NAMES[i];
-    const { data: c, error } = await supabase
-      .from("candidates")
-      .insert({
+    let c: any = null;
+    try { c = createCandidateLocal({
         selection_id: sel.id,
         serial_number: i + 1,
         test_number: `T-2026-${String(i + 1).padStart(3, "0")}`,
@@ -290,38 +285,18 @@ async function seedDemo(reload: () => Promise<void>) {
         generation: "A-36",
         gender: i % 5 === 2 ? "P" : "L",
         combined_identity: `${name} (${rank}) ${nrp}`,
-      })
-      .select("id")
-      .single();
-    if (error || !c) continue;
+      }); } catch { continue; }
+    if (!c) continue;
 
-    // Vary section statuses to populate dashboard
-    // bucket: 0-4 In Progress (draft), 5-9 Pending Review (all submitted),
-    // 10-12 Revision Needed, 13-14 Finalized, 15-19 partial draft
+    const db = getDb() as any;
     const bucket = i;
-    if (bucket >= 5 && bucket <= 9) {
-      await supabase
-        .from("exam_sections")
-        .update({ section_status: "Submitted", submitted_at: new Date().toISOString() })
-        .eq("candidate_id", c.id);
-    } else if (bucket >= 10 && bucket <= 12) {
-      await supabase
-        .from("exam_sections")
-        .update({ section_status: "Revision", revision_requested_at: new Date().toISOString(), revision_reason: "Lengkapi temuan" })
-        .eq("candidate_id", c.id)
-        .in("section_key", ["laboratorium", "tht"]);
-    } else if (bucket >= 13 && bucket <= 14) {
-      await supabase
-        .from("exam_sections")
-        .update({ section_status: "Locked", locked_at: new Date().toISOString() })
-        .eq("candidate_id", c.id);
-    } else if (bucket >= 15) {
-      await supabase
-        .from("exam_sections")
-        .update({ section_status: "Submitted", submitted_at: new Date().toISOString() })
-        .eq("candidate_id", c.id)
-        .in("section_key", ["identitas", "anamnesa", "pemeriksaan_umum"]);
-    }
+    const sections = (db.exam_sections ?? []).filter((x: any) => x.candidate_id === c.id);
+    const setStatus = (rows: any[], patch: any) => rows.forEach((r: any) => Object.assign(r, patch));
+    if (bucket >= 5 && bucket <= 9) setStatus(sections, { section_status: "Submitted", submitted_at: new Date().toISOString() });
+    else if (bucket >= 10 && bucket <= 12) setStatus(sections.filter((r: any) => ["laboratorium", "tht"].includes(r.section_key)), { section_status: "Revision", revision_requested_at: new Date().toISOString(), revision_reason: "Lengkapi temuan" });
+    else if (bucket >= 13 && bucket <= 14) setStatus(sections, { section_status: "Locked", locked_at: new Date().toISOString() });
+    else if (bucket >= 15) setStatus(sections.filter((r: any) => ["identitas", "anamnesa", "pemeriksaan_umum"].includes(r.section_key)), { section_status: "Submitted", submitted_at: new Date().toISOString() });
+    saveDb(db);
   }
   toast.success(`${DEMO_NAMES.length} peserta demo dibuat`);
   await reload();
