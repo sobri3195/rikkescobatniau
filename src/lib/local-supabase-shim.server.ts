@@ -1,8 +1,8 @@
 const chain: any = {
   select: () => chain,
-  insert: async () => ({ data: null, error: null }),
-  update: async () => ({ data: null, error: null }),
-  delete: async () => ({ data: null, error: null }),
+  insert: () => chain,
+  update: () => chain,
+  delete: () => chain,
   eq: () => chain,
   in: () => chain,
   is: () => chain,
@@ -10,5 +10,11 @@ const chain: any = {
   limit: () => chain,
   maybeSingle: async () => ({ data: null, error: null }),
   single: async () => ({ data: null, error: null }),
+  then: (resolve: any) => Promise.resolve({ data: [], error: null }).then(resolve),
 };
-export const supabaseAdmin: any = { from: () => chain, auth: { admin: {} }, storage: { from: () => ({}) }, rpc: async () => ({ data: null, error: null }) };
+export const supabaseAdmin: any = {
+  from: () => chain,
+  auth: { admin: {} },
+  storage: { from: () => ({}) },
+  rpc: async () => ({ data: null, error: null }),
+};
