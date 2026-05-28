@@ -6,8 +6,8 @@ import rikkesLogo from "@/assets/rikkes-logo.png";
 import { useEffect, useState } from "react";
 import { RealtimeNotifier } from "@/components/app/RealtimeNotifier";
 import { NotificationsBell } from "@/components/app/NotificationsBell";
-import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/lib/permissions/use-permissions";
+import { getDb } from "@/lib/localDb";
 import { PERMISSIONS } from "@/lib/permissions/keys";
 
 const NAV: { to: string; label: string; icon: any; perm?: string; perms?: string[] }[] = [
@@ -96,23 +96,11 @@ export function AppShell() {
   const [noTestPending, setNoTestPending] = useState<number>(0);
 
   useEffect(() => {
-    if (isPatientOnly) return; // peserta tidak butuh count ini
-    let cancelled = false;
-    const fetchCount = async () => {
-      const { count } = await supabase
-        .from("candidates")
-        .select("id", { count: "exact", head: true })
-        .is("deleted_at", null)
-        .or("test_number.is.null,test_number.eq.,test_number.like.TMP-*");
-      if (!cancelled) setNoTestPending(count ?? 0);
-    };
-    fetchCount();
-    const channel = supabase
-      .channel("sidebar-no-test-count")
-      .on("postgres_changes", { event: "*", schema: "public", table: "candidates" }, fetchCount)
-      .subscribe();
-    return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, [isPatientOnly]);
+    if (isPatientOnly) return;
+    const db = getDb() as any;
+    const count = (db.candidates ?? []).filter((c: any) => !c.test_number || String(c.test_number).startsWith("TMP-")).length;
+    setNoTestPending(count);
+  }, [isPatientOnly, path]);
 
   useEffect(() => {
     try { localStorage.setItem("rikkes:sidebar:collapsed", collapsed ? "1" : "0"); } catch {}
@@ -130,6 +118,7 @@ export function AppShell() {
               <div className="text-[10px] tracking-widest uppercase opacity-70">Sistem Digital</div>
               <div className="text-base font-bold leading-tight truncate">RIKKES TNI AU</div>
               <div className="text-[10px] opacity-70">Diskesau</div>
+              <div className="mt-1 inline-flex rounded bg-emerald-500/20 px-2 py-0.5 text-[10px]">Mode Lokal</div>
             </div>
           )}
         </div>
