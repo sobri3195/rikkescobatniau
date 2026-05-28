@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { getDb } from "@/lib/localDb";
+import { listActiveExamsLocal } from "@/lib/services/examService";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,8 +39,7 @@ function HariHQueuePage() {
 
   async function load() {
     setLoading(true);
-    const db = getDb() as any;
-    const data = (db.exams ?? []).filter((e: any) => e.exam_status !== "Finalized").slice(0,500).map((e: any) => ({ ...e, candidates: (db.candidates ?? []).find((c: any) => c.id === e.candidate_id) }));
+    const data = listActiveExamsLocal().slice(0, 500) as any[];
     setLoading(false);
     const mapped: Row[] = (data ?? []).map((r: any) => ({
       exam_id: r.id,

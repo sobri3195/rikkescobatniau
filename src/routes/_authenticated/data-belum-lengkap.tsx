@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Activity, Radio, ExternalLink, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/use-auth";
+import { listActiveExamsLocal } from "@/lib/services/examService";
 import { logAudit } from "@/lib/audit";
 import { QuickSupportingModal } from "@/components/hari-h/QuickSupportingModal";
 
@@ -77,12 +78,7 @@ function IncompletePage() {
   const [modal, setModal] = useState<{ mode: "ekg" | "radiology"; examId: string; candidateId: string } | null>(null);
 
   async function load() {
-    const db = getDb() as any;
-    const data = (db.exams ?? []).filter((e: any) => e.exam_status !== "Finalized").slice(0,1000).map((e: any) => ({
-      ...e,
-      candidates: (db.candidates ?? []).find((c: any) => c.id === e.candidate_id),
-      medical_history_forms: (db.medical_history_forms ?? []).filter((m: any) => m.exam_id === e.id),
-    }));
+    const data = listActiveExamsLocal();
     const mapped: Row[] = (data ?? []).map((r: any) => {
       const cand = r.candidates;
       const issues: IssueKey[] = [];
