@@ -13,7 +13,7 @@ import { useAuth } from "@/lib/use-auth";
 import { DeletePersonnelDialog } from "@/components/app/DeletePersonnelDialog";
 import { createCandidateLocal, findDuplicateTestNumberLocal, listCandidatesLocal } from "@/lib/services/candidateService";
 import { ensureExamForCandidateLocal, getExamByCandidateIdLocal } from "@/lib/services/examService";
-import { listSelections, createSelection } from "@/lib/selectionService";
+import { listActiveSelections, createSelection } from "@/lib/selectionService";
 import { getDb, saveDb } from "@/lib/localDb";
 
 export const Route = createFileRoute("/_authenticated/candidates")({
@@ -45,7 +45,7 @@ function CandidatesPage() {
 
   async function load() {
     const c = listCandidatesLocal().filter((x: any) => !x.is_deleted);
-    const s = await listSelections();
+    const s = await listActiveSelections();
     setCands(c as Cand[]);
     setSels((s ?? []) as Sel[]);
   }
@@ -277,7 +277,7 @@ const POK = ["TEK", "ADM", "LEK", "KES"];
 const PANDA = ["JAKARTA", "BANDUNG", "SURABAYA", "MEDAN"];
 
 async function seedDemo(reload: () => Promise<void>) {
-  let sel = (await listSelections())[0] as any;
+  let sel = (await listActiveSelections())[0] as any;
   if (!sel) {
     sel = await createSelection({
         name: "SUSPAJEMEN A-36",

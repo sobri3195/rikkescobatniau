@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Upload, Download, AlertTriangle, CheckCircle2, XCircle, Info } from "lucide-react";
 import { saveAs } from "file-saver";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { listActiveSelections } from "@/lib/selectionService";
 import {
   buildCsvTemplateBlob,
   parseCsvAndValidate,
@@ -35,16 +35,11 @@ export function BulkImportCsvDialog({ open, onOpenChange, onImported }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    supabase
-      .from("selections")
-      .select("id, name, year_label")
-      .order("created_at", { ascending: false })
-      .limit(100)
-      .then(({ data }) => {
-        const list = (data ?? []) as Selection[];
-        setSelections(list);
-        setSelectionId((prev) => prev || list[0]?.id || "");
-      });
+    listActiveSelections().then((data) => {
+      const list = (data ?? []) as Selection[];
+      setSelections(list);
+      setSelectionId((prev) => prev || (list.length === 1 ? list[0]?.id ?? "" : list[0]?.id ?? ""));
+    });
   }, [open]);
 
   function reset() { setResult(null); setFileName(""); }

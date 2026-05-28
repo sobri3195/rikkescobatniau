@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
+import { listActiveSelections } from "@/lib/selectionService";
 import { useAuth } from "@/lib/use-auth";
 import { logAudit } from "@/lib/audit";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -85,7 +86,7 @@ function ImportNomorTesPage() {
   useEffect(() => {
     if (!allowed) return;
     (async () => {
-      const { data } = await supabase.from("selections").select("id, name, year_label").order("year_label", { ascending: false });
+      const data = await listActiveSelections();
       setSels((data ?? []) as Selection[]);
       await logAudit({ action: "open_import_nomor_tes", module: "Import Nomor Tes" });
       await loadHistory();
