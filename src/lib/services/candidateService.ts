@@ -26,7 +26,25 @@ export function listCandidatesWithoutTestNumberLocal(filters: any = {}) {
   return rows;
 }
 
-export function createCandidateLocal(input: any) { const db = getDb() as any; if (!input.selection_id) throw new Error("selection_id wajib"); const now = nowIso(); const tn = String(input.test_number ?? "").trim(); const candidate = { id: generateId("cand"), selection_id: input.selection_id, full_name: input.full_name, gender: input.gender ?? "L", rank: input.rank ?? "", nrp_nip: input.nrp_nip ?? "", unit_position: input.unit_position ?? input.unit ?? "", pok_korp: input.pok_korp ?? "", panda: input.panda ?? "", group_name: input.group_name ?? input.kelompok ?? "", birth_place: input.birth_place ?? "", birth_date: input.birth_date ?? "", phone: input.phone ?? "", address: input.address ?? "", test_number: tn, temporary_id: tn ? "" : generateTemporaryId(db), test_number_status: tn ? "assigned" : "pending", no_test_missing: !tn, registration_notes: input.registration_notes ?? "", is_deleted: false, created_at: now, updated_at: now }; db.candidates = db.candidates ?? []; db.candidates.push(candidate); saveDb(db); createExamForCandidateLocal(candidate); addAuditLogLocal("create_candidate_local", { candidate_id: candidate.id, selection_id: candidate.selection_id }); return candidate; }
-export function updateCandidateLocal(id: string, patch: any) { const db = getDb() as any; const c = (db.candidates ?? []).find((x: any) => x.id === id); if (!c) return null; const prevSelectionId = c.selection_id; Object.assign(c, patch, { updated_at: nowIso() }); if (prevSelectionId !== c.selection_id) { (db.exams ?? []).filter((e: any) => e.candidate_id === id).forEach((e: any) => e.selection_id = c.selection_id); (db.exam_sections ?? []).filter((s: any) => s.candidate_id === id).forEach((s: any) => s.selection_id = c.selection_id); } saveDb(db); return c; }
+export function createCandidateLocal(input: any) { const db = getDb() as any; if (!input.selection_id) throw new Error("selection_id wajib"); const now = nowIso(); const tn = String(input.test_number ?? "").trim(); if (tn) { const dup = findDuplicateTestNumberLocal({ selectionId: input.selection_id, testNumber: tn }); if (dup) throw new Error(`Nomor test sudah dipakai oleh ${dup.full_name ?? "peserta lain"}.`); } const candidate = { id: generateId("cand"), selection_id: input.selection_id, full_name: input.full_name, gender: input.gender ?? "L", rank: input.rank ?? "", nrp_nip: input.nrp_nip ?? "", unit_position: input.unit_position ?? input.unit ?? "", pok_korp: input.pok_korp ?? "", panda: input.panda ?? "", group_name: input.group_name ?? input.kelompok ?? "", birth_place: input.birth_place ?? "", birth_date: input.birth_date ?? "", phone: input.phone ?? "", address: input.address ?? "", test_number: tn, temporary_id: tn ? "" : generateTemporaryId(db), test_number_status: tn ? "assigned" : "pending", no_test_missing: !tn, registration_notes: input.registration_notes ?? "", is_deleted: false, created_at: now, updated_at: now }; db.candidates = db.candidates ?? []; db.candidates.push(candidate); saveDb(db); createExamForCandidateLocal(candidate); addAuditLogLocal("create_candidate_local", { candidate_id: candidate.id, selection_id: candidate.selection_id }); return candidate; }
+export function updateCandidateLocal(id: string, patch: any) { const db = getDb() as any; const c = (db.candidates ?? []).find((x: any) => x.id === id); if (!c) throw new Error("Peserta tidak ditemukan di localDb."); if (patch?.test_number) { const dup = findDuplicateTestNumberLocal({ selectionId: patch.selection_id ?? c.selection_id, testNumber: patch.test_number, excludeCandidateId: id }); if (dup) throw new Error(`Nomor test sudah dipakai oleh ${dup.full_name ?? "peserta lain"}.`); } const prevSelectionId = c.selection_id; Object.assign(c, patch, { updated_at: nowIso() }); if (prevSelectionId !== c.selection_id) { (db.exams ?? []).filter((e: any) => e.candidate_id === id).forEach((e: any) => e.selection_id = c.selection_id); (db.exam_sections ?? []).filter((s: any) => s.candidate_id === id).forEach((s: any) => s.selection_id = c.selection_id); } saveDb(db); return c; }
 export function deleteCandidateLocal(id: string) { return updateCandidateLocal(id, { is_deleted: true, deleted_at: nowIso(), deleted_by: getLocalSession()?.user_id ?? "system_local" }); }
 export function restoreCandidateLocal(id: string) { return updateCandidateLocal(id, { is_deleted: false, deleted_at: null, deleted_by: null }); }
+
+
+export function getCandidateByIdLocal(candidateId: string) {
+  return ((getDb() as any).candidates ?? []).find((candidate: any) => candidate.id === candidateId && !candidate.is_deleted) ?? null;
+}
+
+export function findDuplicateTestNumberLocal({ selectionId, testNumber, excludeCandidateId }: { selectionId: string; testNumber: string; excludeCandidateId?: string; }) {
+  const db = getDb() as any;
+  const normalizedTestNumber = String(testNumber ?? "").trim();
+  if (!normalizedTestNumber) return null;
+  return (db.candidates ?? []).find((candidate: any) => {
+    const sameSelection = candidate.selection_id === selectionId;
+    const sameTestNumber = String(candidate.test_number ?? "").trim() === normalizedTestNumber;
+    const notSelf = candidate.id !== excludeCandidateId;
+    const notDeleted = !candidate.is_deleted && !candidate.deleted_at;
+    return sameSelection && sameTestNumber && notSelf && notDeleted;
+  }) ?? null;
+}
