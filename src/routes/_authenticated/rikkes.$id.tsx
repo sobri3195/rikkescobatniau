@@ -554,7 +554,7 @@ function FormHeader(props: {
 
       <div className="p-5">
         <Suspense fallback={<SectionSkeleton />}>
-          <ActiveForm active={active} cand={cand} examId={examId} selectionLabel={selectionLabel} data={formData} onChange={setFormData} readOnly={effectiveReadOnly} canEditAfterSubmit={canEditAfterSubmit} onPersisted={onPersisted} />
+          <ActiveForm key={active} active={active} cand={cand} examId={examId} selectionLabel={selectionLabel} data={formData} onChange={setFormData} readOnly={effectiveReadOnly} canEditAfterSubmit={canEditAfterSubmit} onPersisted={onPersisted} />
         </Suspense>
       </div>
 
