@@ -1,6 +1,8 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { createSelection, deleteSelection, isLocalStorageMode, listSelections, updateSelection } from "@/lib/selectionService";
+import { getDb } from "@/lib/localDb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +29,7 @@ import { Card, CardContent } from "@/components/ui/card";
 export const Route = createFileRoute("/_authenticated/selections")({
   beforeLoad: async () => {
     // Redirect pimpinan_viewer ke Dashboard (Master Seleksi hanya untuk admin/super_admin)
+    if (isLocalStorageMode()) return;
     const { supabase } = await import("@/integrations/supabase/client");
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -65,11 +68,7 @@ function SelectionsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   async function load() {
-    const { data } = await supabase
-      .from("selections")
-      .select("*")
-      .order("is_default", { ascending: false })
-      .order("created_at", { ascending: false });
+    const data = await listSelections();
     setItems((data ?? []) as Selection[]);
   }
   useEffect(() => {
@@ -91,6 +90,14 @@ function SelectionsPage() {
   }, [items, search, statusFilter]);
 
   async function setAsDefault(s: Selection) {
+    if (isLocalStorageMode()) {
+      const db = getDb() as any;
+      db.selections = (db.selections ?? []).map((x: any) => ({ ...x, is_default: x.id === s.id, status: x.id === s.id ? "Aktif" : x.status }));
+      localStorage.setItem("rikkes_tni_au_local_db_v1", JSON.stringify(db));
+      toast.success("Seleksi default diperbarui");
+      load();
+      return;
+    }
     const { error: e1 } = await supabase.from("selections").update({ is_default: false }).eq("is_default", true);
     if (e1) return toast.error(e1.message);
     const { data, error } = await supabase
@@ -109,8 +116,7 @@ function SelectionsPage() {
     const next = (s.status ?? "").toLowerCase() === "nonaktif" ? "Aktif" : "Nonaktif";
     const patch: any = { status: next };
     if (next === "Nonaktif" && s.is_default) patch.is_default = false;
-    const { data, error } = await supabase.from("selections").update(patch).eq("id", s.id).select().single();
-    if (error) return toast.error(error.message);
+    const data = await updateSelection(s.id, patch);
     await logAudit({
       action: next === "Nonaktif" ? "deactivate" : "activate",
       module: "selections",
@@ -124,17 +130,18 @@ function SelectionsPage() {
 
   async function doDelete() {
     if (!deleteSel) return;
-    const { count } = await supabase
+    const count = isLocalStorageMode()
+      ? ((getDb() as any).candidates ?? []).filter((c: any) => c.selection_id === deleteSel.id).length
+      : (await supabase
       .from("candidates")
       .select("id", { count: "exact", head: true })
-      .eq("selection_id", deleteSel.id);
+      .eq("selection_id", deleteSel.id)).count ?? 0;
     if ((count ?? 0) > 0) {
       toast.error(`Tidak bisa dihapus: masih ada ${count} peserta. Nonaktifkan saja.`);
       setDeleteSel(null);
       return;
     }
-    const { error } = await supabase.from("selections").delete().eq("id", deleteSel.id);
-    if (error) return toast.error(error.message);
+    await deleteSelection(deleteSel.id);
     await logAudit({ action: "delete", module: "selections", record_id: deleteSel.id, before: deleteSel });
     toast.success("Seleksi dihapus");
     setDeleteSel(null);
@@ -277,23 +284,33 @@ function SelectionForm({ onDone, existing }: { onDone: () => void; existing?: Se
     const payload: any = { ...form };
     if (!payload.start_date) delete payload.start_date;
     if (!payload.end_date) delete payload.end_date;
-    if (existing) {
-      const { data, error } = await supabase
-        .from("selections")
-        .update(payload)
-        .eq("id", existing.id)
-        .select()
-        .single();
-      if (error) return toast.error(error.message);
-      await logAudit({ action: "update", module: "selections", record_id: existing.id, before: existing, after: data });
-      toast.success("Seleksi diperbarui");
-    } else {
-      const { data, error } = await supabase.from("selections").insert(payload).select().single();
-      if (error) return toast.error(error.message);
-      await logAudit({ action: "create", module: "selections", record_id: data.id, after: data });
-      toast.success("Seleksi dibuat");
+    try {
+      if (existing) {
+        const data = await updateSelection(existing.id, payload);
+        await logAudit({ action: "update", module: "selections", record_id: existing.id, before: existing, after: data });
+        toast.success("Seleksi diperbarui");
+      } else {
+        const data = await createSelection(payload);
+        await logAudit({ action: "create", module: "selections", record_id: data.id, after: data });
+        toast.success("Seleksi dibuat");
+      }
+      onDone();
+    } catch (err: any) {
+      const code = err?.code ?? "unknown";
+      const message = err?.message ?? "unknown";
+      if (String(code) === "42501" || /row-level security|permission/i.test(String(message))) {
+        toast.error("Gagal membuat seleksi. Akun Anda belum memiliki izin untuk menambah seleksi.");
+      } else {
+        toast.error(message);
+      }
+      console.error("Selection mutation failed", {
+        table: "selections",
+        action: existing ? "update" : "insert",
+        code,
+        message,
+        storage_mode: import.meta.env.VITE_STORAGE_MODE ?? "supabase",
+      });
     }
-    onDone();
   }
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
