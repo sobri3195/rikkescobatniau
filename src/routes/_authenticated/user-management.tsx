@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@/shims/tanstack-react-start";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { useAuth } from "@/lib/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -125,9 +125,9 @@ async function writeClientAudit(args: {
   before?: any;
   after?: any;
 }) {
-  const { data: u } = await supabase.auth.getUser();
+  const { data: u } = await localDataApi.auth.getUser();
   if (!u.user) return;
-  await supabase.from("audit_logs").insert({
+  await localDataApi.from("audit_logs").insert({
     user_id: u.user.id,
     action: args.action,
     module: "user_management",
@@ -178,11 +178,11 @@ function UserManagementPage() {
   async function load() {
     setLoading(true);
     const [{ data: profiles, error: pe }, { data: rolesData, error: re }] = await Promise.all([
-      supabase
+      localDataApi
         .from("profiles")
         .select("id, auth_user_id, full_name, email, rank, unit, is_active, created_at")
         .order("created_at", { ascending: false }),
-      supabase.from("user_roles").select("user_id, role"),
+      localDataApi.from("user_roles").select("user_id, role"),
     ]);
     if (pe || re) {
       toast.error("Gagal memuat data pengguna");
@@ -206,7 +206,7 @@ function UserManagementPage() {
   }
 
   async function loadAudit() {
-    const { data } = await supabase
+    const { data } = await localDataApi
       .from("audit_logs")
       .select("id, action, record_id, user_id, created_at, before_data, after_data")
       .eq("module", "user_management")
@@ -246,7 +246,7 @@ function UserManagementPage() {
         if (role === "super_admin" && row.roles.length === 1) {
           throw new Error("Tidak boleh mencabut peran terakhir Super Admin");
         }
-        const { error } = await supabase
+        const { error } = await localDataApi
           .from("user_roles")
           .delete()
           .eq("user_id", row.auth_user_id)
@@ -260,7 +260,7 @@ function UserManagementPage() {
         });
         toast.success(`Peran ${role} dicabut`);
       } else {
-        const { error } = await supabase
+        const { error } = await localDataApi
           .from("user_roles")
           .insert({ user_id: row.auth_user_id, role });
         if (error) throw error;
@@ -282,7 +282,7 @@ function UserManagementPage() {
 
   async function toggleActive(row: ProfileRow) {
     const next = !row.is_active;
-    const { error } = await supabase
+    const { error } = await localDataApi
       .from("profiles")
       .update({ is_active: next })
       .eq("id", row.id);
@@ -327,7 +327,7 @@ function UserManagementPage() {
     if (!editTarget) return;
     setBusy("edit");
     try {
-      const { error } = await supabase
+      const { error } = await localDataApi
         .from("profiles")
         .update({
           full_name: form.full_name.trim(),

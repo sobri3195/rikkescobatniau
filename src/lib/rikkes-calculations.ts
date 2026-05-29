@@ -2,7 +2,7 @@
 // Murni administratif: tidak melakukan diagnosis, hanya menerjemahkan
 // klasifikasi yang sudah diinput dokter/petugas menjadi KESUM/KESWA/hasil akhir.
 
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { logAudit } from "@/lib/audit";
 import { SECTIONS } from "@/lib/sections";
 
@@ -262,12 +262,12 @@ export function checkReadiness(
 // ---------- Persistence ----------
 export async function recalculateExamSummary(examId: string) {
   const [{ data: ex }, { data: secs }, { data: mm }] = await Promise.all([
-    supabase.from("exams").select("id,candidate_id,exam_status").eq("id", examId).maybeSingle(),
-    supabase
+    localDataApi.from("exams").select("id,candidate_id,exam_status").eq("id", examId).maybeSingle(),
+    localDataApi
       .from("exam_sections")
       .select("section_key,section_name,classification,findings,notes,section_status")
       .eq("exam_id", examId),
-    supabase.from("medical_measurements").select("*").eq("exam_id", examId).maybeSingle(),
+    localDataApi.from("medical_measurements").select("*").eq("exam_id", examId).maybeSingle(),
   ]);
   if (!ex) return null;
 
@@ -290,18 +290,18 @@ export async function recalculateExamSummary(examId: string) {
     final_score: score,
     updated_at: new Date().toISOString(),
   };
-  await supabase.from("exams").update(examPatch).eq("id", examId);
+  await localDataApi.from("exams").update(examPatch).eq("id", examId);
 
   // Update / upsert measurements computed fields
   if (mm) {
-    await supabase
+    await localDataApi
       .from("medical_measurements")
       .update({ bmi, bmi_classification: bmiClass })
       .eq("id", mm.id);
   }
 
   // Update medical_summary
-  await supabase
+  await localDataApi
     .from("medical_summary")
     .update({
       count_b: counts.B,

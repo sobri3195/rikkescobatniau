@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -51,9 +51,9 @@ export function DentalOdontogramForm({
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const { data: e } = await supabase.from("exam_dental").select("*").eq("exam_id", examId).maybeSingle();
+    const { data: e } = await localDataApi.from("exam_dental").select("*").eq("exam_id", examId).maybeSingle();
     setExam(e ?? { status: "Draft" });
-    const { data: t } = await supabase.from("dental_tooth_records").select("*").eq("exam_dental_id", e?.id ?? "00000000-0000-0000-0000-000000000000");
+    const { data: t } = await localDataApi.from("dental_tooth_records").select("*").eq("exam_dental_id", e?.id ?? "00000000-0000-0000-0000-000000000000");
     const map: Record<number, ToothRow> = {};
     (t ?? []).forEach((r: any) => { map[r.tooth_number] = { tooth_number: r.tooth_number, markers_json: r.markers_json ?? [], notes: r.notes, id: r.id }; });
     setTeeth(map);
@@ -78,7 +78,7 @@ export function DentalOdontogramForm({
     // Keep rikkes_form_sections row for 'gigi_odontogram' in sync so the
     // RIKKES sidebar / header reflect the actual dental submission status.
     try {
-      const { data: existing } = await supabase
+      const { data: existing } = await localDataApi
         .from("rikkes_form_sections")
         .select("id")
         .eq("exam_id", examId)
@@ -91,9 +91,9 @@ export function DentalOdontogramForm({
       }
       if (reason) base.return_reason = reason; // reuse field to surface latest revision note
       if (existing?.id) {
-        await supabase.from("rikkes_form_sections").update(base).eq("id", existing.id);
+        await localDataApi.from("rikkes_form_sections").update(base).eq("id", existing.id);
       } else {
-        await supabase.from("rikkes_form_sections").insert({
+        await localDataApi.from("rikkes_form_sections").insert({
           exam_id: examId,
           candidate_id: candidateId,
           group_key: "gigi_odontogram",
@@ -115,7 +115,7 @@ export function DentalOdontogramForm({
     }
     setBusy(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
+      const { data: u } = await localDataApi.auth.getUser();
       const prevClassification = exam?.classification ?? null;
       const payload = {
         exam_id: examId, candidate_id: candidateId,
@@ -132,22 +132,22 @@ export function DentalOdontogramForm({
         examiner_id: u.user?.id, examined_at: new Date().toISOString(), status,
       };
       const examRes = exam?.id
-        ? await supabase.from("exam_dental").update(payload).eq("id", exam.id).select().single()
-        : await supabase.from("exam_dental").insert(payload).select().single();
+        ? await localDataApi.from("exam_dental").update(payload).eq("id", exam.id).select().single()
+        : await localDataApi.from("exam_dental").insert(payload).select().single();
       if (examRes.error) throw examRes.error;
       const examDentalId = examRes.data!.id;
 
       // Upsert tooth records (delete then re-insert touched teeth)
       const touched = Object.values(teeth).filter((t) => (t.markers_json?.length ?? 0) > 0 || t.notes);
       if (touched.length) {
-        await supabase.from("dental_tooth_records").delete().eq("exam_dental_id", examDentalId);
+        await localDataApi.from("dental_tooth_records").delete().eq("exam_dental_id", examDentalId);
         const ins = touched.map((t) => ({
           exam_dental_id: examDentalId,
           tooth_number: t.tooth_number,
           markers_json: t.markers_json,
           notes: t.notes,
         }));
-        const r = await supabase.from("dental_tooth_records").insert(ins);
+        const r = await localDataApi.from("dental_tooth_records").insert(ins);
         if (r.error) throw r.error;
       }
       await syncParentSection(status, u.user?.id, revisionReason);

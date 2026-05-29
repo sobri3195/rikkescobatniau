@@ -12,7 +12,7 @@ const chain: any = {
   single: async () => ({ data: null, error: null }),
   then: (resolve: any) => Promise.resolve({ data: [], error: null }).then(resolve),
 };
-export const supabaseAdmin: any = {
+export const localAdminApi: any = {
   from: () => chain,
   auth: { admin: {} },
   storage: { from: () => ({}) },

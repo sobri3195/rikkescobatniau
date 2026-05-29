@@ -23,6 +23,24 @@ const DEFAULT_SECTIONS = DEFAULT_EXAM_SECTIONS;
 
 export type LocalDb = ReturnType<typeof createEmptyDb>;
 
+function hasLocalStorage() {
+  return typeof localStorage !== "undefined";
+}
+
+export function emitLocalDbChanged(moduleName = "localDb") {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("rikkes-localdb-change", { detail: { moduleName, updated_at: nowIso() } }),
+  );
+}
+
+export function subscribeLocalDbChanged(callback: (detail: any) => void) {
+  if (typeof window === "undefined") return () => {};
+  const handler = (event: Event) => callback((event as CustomEvent).detail ?? {});
+  window.addEventListener("rikkes-localdb-change", handler);
+  return () => window.removeEventListener("rikkes-localdb-change", handler);
+}
+
 export function nowIso() {
   return new Date().toISOString();
 }
@@ -115,6 +133,7 @@ export function migrateLocalDb(input?: any): LocalDb {
       }
     })() ??
     createEmptyDb();
+  const originalJson = JSON.stringify(db);
   const base: any = createEmptyDb();
   for (const k of Object.keys(base)) if (db[k] === undefined) db[k] = base[k];
   db.settings = { ...base.settings, ...(db.settings ?? {}) };
@@ -150,13 +169,10 @@ export function migrateLocalDb(input?: any): LocalDb {
     test_number_status:
       c.test_number_status ?? (String(c.test_number ?? "").trim() ? "assigned" : "pending"),
     temporary_id:
-      c.temporary_id ||
-      (String(c.test_number ?? "").trim()
-        ? ""
-        : `TMP-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0")}`),
+      c.temporary_id || (String(c.test_number ?? "").trim() ? "" : generateTemporaryIdLocal(db)),
   }));
   repairLocalDbRelations(db);
-  saveDb(db);
+  if (JSON.stringify(db) !== originalJson) saveDb(db, "migrateLocalDb");
   return db;
 }
 
@@ -179,7 +195,7 @@ export function repairLocalDbRelations(inputDb?: any) {
     }
     const testNumber = String(candidate.test_number ?? "").trim();
     if (!testNumber && !String(candidate.temporary_id ?? "").trim()) {
-      candidate.temporary_id = `TMP-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0")}`;
+      candidate.temporary_id = generateTemporaryIdLocal(db);
       candidate.test_number_status = "pending";
       candidate.no_test_missing = true;
       candidate.updated_at = now;
@@ -237,7 +253,7 @@ export function exportLocalDb() {
 }
 export function importLocalDb(json: string) {
   const parsed = JSON.parse(json);
-  localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(parsed));
+  if (hasLocalStorage()) localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(parsed));
   return parsed;
 }
 
@@ -437,11 +453,12 @@ export function getDisplayStatusLocal(
 
 export function getLocalSession() {
   try {
+    if (!hasLocalStorage()) return null;
     const raw = localStorage.getItem(LOCAL_SESSION_KEY);
     if (!raw) return null;
     return JSON.parse(raw);
   } catch {
-    localStorage.removeItem(LOCAL_SESSION_KEY);
+    if (hasLocalStorage()) localStorage.removeItem(LOCAL_SESSION_KEY);
     return null;
   }
 }
@@ -450,7 +467,7 @@ export function requireLocalSession() {
   const session = getLocalSession();
 
   if (!session?.user_id) {
-    localStorage.removeItem(LOCAL_SESSION_KEY);
+    if (hasLocalStorage()) localStorage.removeItem(LOCAL_SESSION_KEY);
     throw new Error("Session lokal tidak valid. Silakan login ulang.");
   }
 
@@ -567,10 +584,17 @@ export function resolveParticipantDetailLocal(params: {
       db.exams.find(
         (e: any) =>
           e.candidate_id === candidate.id &&
+          !e.is_deleted &&
           (!params.selectionId || e.selection_id === params.selectionId),
       ) ??
-      db.exams.find((e: any) => e.candidate_id === candidate.id) ??
+      db.exams.find((e: any) => e.candidate_id === candidate.id && !e.is_deleted) ??
       null;
+  }
+  if (candidate && !exam) {
+    repairLocalDbRelations(db);
+    saveDb(db, "resolveRikkesDetailLocal");
+    exam = db.exams.find((e: any) => e.candidate_id === candidate.id && !e.is_deleted) ?? null;
+    if (exam) source = `${source}_auto_repaired`;
   }
   return {
     candidate,

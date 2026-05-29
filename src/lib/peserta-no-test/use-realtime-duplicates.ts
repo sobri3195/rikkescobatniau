@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { toast } from "sonner";
 
 type CandSnapshot = {
@@ -30,7 +30,7 @@ export function useRealtimeDuplicateAlerts(opts: { enabled: boolean; onAlert?: (
     let cancelled = false;
 
     (async () => {
-      const { data } = await supabase
+      const { data } = await localDataApi
         .from("candidates")
         .select("id, full_name, birth_date, nrp_nip")
         .is("deleted_at", null)
@@ -44,7 +44,7 @@ export function useRealtimeDuplicateAlerts(opts: { enabled: boolean; onAlert?: (
       }
     })();
 
-    const channel = supabase
+    const channel = localDataApi
       .channel("candidates-duplicate-watch")
       .on(
         "postgres_changes",
@@ -81,6 +81,6 @@ export function useRealtimeDuplicateAlerts(opts: { enabled: boolean; onAlert?: (
       )
       .subscribe();
 
-    return () => { cancelled = true; supabase.removeChannel(channel); };
+    return () => { cancelled = true; localDataApi.removeChannel(channel); };
   }, [opts.enabled, opts.onAlert]);
 }

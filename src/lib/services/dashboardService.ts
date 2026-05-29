@@ -33,3 +33,7 @@ export function loadDashboardSummaryLocal() {
     totalSections: sections.length,
   };
 }
+
+export function buildDashboardSummaryLocal() {
+  return loadDashboardSummaryLocal();
+}

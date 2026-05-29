@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -39,7 +39,7 @@ function AuditPage() {
 
   async function load() {
     setLoading(true);
-    let query = supabase
+    let query = localDataApi
       .from("audit_logs")
       .select("id,action,module,record_id,candidate_id,user_id,before_data,after_data,created_at")
       .order("created_at", { ascending: false })
@@ -50,7 +50,7 @@ function AuditPage() {
     if (fDateTo) query = query.lte("created_at", fDateTo + "T23:59:59");
     const { data } = await query;
     setRows((data ?? []) as AuditRow[]);
-    const { data: profs } = await supabase.from("profiles").select("auth_user_id,full_name,email");
+    const { data: profs } = await localDataApi.from("profiles").select("auth_user_id,full_name,email");
     const m = new Map<string, Profile>();
     for (const p of (profs ?? []) as Profile[]) m.set(p.auth_user_id, p);
     setProfiles(m);

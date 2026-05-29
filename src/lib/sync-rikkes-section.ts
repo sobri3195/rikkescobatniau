@@ -7,7 +7,7 @@
 //
 // Non-throwing: failures are logged but never block the primary submit.
 
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 
 export async function syncRikkesGroupStatus(args: {
   examId: string;
@@ -19,7 +19,7 @@ export async function syncRikkesGroupStatus(args: {
 }): Promise<void> {
   const { examId, candidateId, groupKey, status, uid, revisionReason } = args;
   try {
-    const { data: existing } = await supabase
+    const { data: existing } = await localDataApi
       .from("rikkes_form_sections")
       .select("id")
       .eq("exam_id", examId)
@@ -38,9 +38,9 @@ export async function syncRikkesGroupStatus(args: {
     if (revisionReason) base.return_reason = revisionReason;
 
     if (existing?.id) {
-      await supabase.from("rikkes_form_sections").update(base).eq("id", existing.id);
+      await localDataApi.from("rikkes_form_sections").update(base).eq("id", existing.id);
     } else {
-      await supabase.from("rikkes_form_sections").insert({
+      await localDataApi.from("rikkes_form_sections").insert({
         exam_id: examId,
         candidate_id: candidateId,
         group_key: groupKey,

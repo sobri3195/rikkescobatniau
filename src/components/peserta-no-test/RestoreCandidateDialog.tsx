@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { logAudit } from "@/lib/audit";
 
 type Props = {
@@ -27,7 +27,7 @@ export function RestoreCandidateDialog({ open, onOpenChange, candidate, onDone }
     setBusy(true);
     try {
       const beforeSnap = { deleted_at: "set", delete_reason: candidate.delete_reason };
-      const { error } = await supabase
+      const { error } = await localDataApi
         .from("candidates")
         .update({ deleted_at: null, deleted_by: null, delete_reason: null } as never)
         .eq("id", candidate.id);

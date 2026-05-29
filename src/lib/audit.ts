@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 
 export async function logAudit(input: {
   action: string;
@@ -9,11 +9,11 @@ export async function logAudit(input: {
   before?: unknown;
   after?: unknown;
 }) {
-  const { data: u } = await supabase.auth.getUser();
+  const { data: u } = await localDataApi.auth.getUser();
   if (!u.user) return;
   const device_info =
     typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 240) : null;
-  await supabase.from("audit_logs").insert({
+  await localDataApi.from("audit_logs").insert({
     user_id: u.user.id,
     action: input.action,
     module: input.module ?? null,

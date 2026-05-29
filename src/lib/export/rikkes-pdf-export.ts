@@ -1,9 +1,9 @@
 // Phase 6: PDF export engine for RIKKES documents.
-// Pulls data from Lovable Cloud (Supabase) — never from dummy/mocks.
+// Pulls data from localDb — never from dummy/mocks.
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { SECTIONS } from "@/lib/sections";
 
 type Selection = {
@@ -89,9 +89,11 @@ function stampWatermarks(doc: jsPDF, labels: string[]) {
 }
 
 // --------- Image attachment helpers ---------
-async function fetchAttachmentDataUrl(path: string): Promise<{ dataUrl: string; format: string } | null> {
+async function fetchAttachmentDataUrl(
+  path: string,
+): Promise<{ dataUrl: string; format: string } | null> {
   try {
-    const { data, error } = await supabase.storage
+    const { data, error } = await localDataApi.storage
       .from("hari-h-attachments")
       .createSignedUrl(path, 300);
     if (error || !data?.signedUrl) return null;
@@ -111,7 +113,12 @@ async function fetchAttachmentDataUrl(path: string): Promise<{ dataUrl: string; 
   }
 }
 
-async function drawAttachmentPages(doc: jsPDF, b: CandidateBundle, title: string, attachments: any[]) {
+async function drawAttachmentPages(
+  doc: jsPDF,
+  b: CandidateBundle,
+  title: string,
+  attachments: any[],
+) {
   if (!attachments?.length) return;
   for (const att of attachments) {
     if (!att?.path) continue;
@@ -119,7 +126,10 @@ async function drawAttachmentPages(doc: jsPDF, b: CandidateBundle, title: string
     const img = await fetchAttachmentDataUrl(att.path);
     if (!img) continue;
     doc.addPage();
-    drawHeader(doc, b.selection, { confidential: true, subtitle: `LAMPIRAN — ${title.toUpperCase()}` });
+    drawHeader(doc, b.selection, {
+      confidential: true,
+      subtitle: `LAMPIRAN — ${title.toUpperCase()}`,
+    });
     doc.setFont(FONT, "normal");
     doc.setFontSize(9);
     doc.text(`${safe(b.candidate.full_name)} — ${safe(b.candidate.test_number)}`, 15, 48);
@@ -148,9 +158,14 @@ function drawHeader(
   const w = doc.internal.pageSize.getWidth();
   doc.setFont(FONT, "bold");
   doc.setFontSize(11);
-  doc.text(safe(selection.institution_header_line_1, "MARKAS BESAR TNI ANGKATAN UDARA"), w / 2, 14, {
-    align: "center",
-  });
+  doc.text(
+    safe(selection.institution_header_line_1, "MARKAS BESAR TNI ANGKATAN UDARA"),
+    w / 2,
+    14,
+    {
+      align: "center",
+    },
+  );
   doc.text(safe(selection.institution_header_line_2, "PUSAT KESEHATAN"), w / 2, 19, {
     align: "center",
   });
@@ -197,11 +212,7 @@ function drawFooter(doc: jsPDF) {
     doc.setFontSize(8);
     doc.setTextColor(120);
     doc.text(`Halaman ${i} dari ${pageCount}`, w - 15, h - 8, { align: "right" });
-    doc.text(
-      `Dicetak ${new Date().toLocaleString("id-ID")}`,
-      15,
-      h - 8,
-    );
+    doc.text(`Dicetak ${new Date().toLocaleString("id-ID")}`, 15, h - 8);
     doc.setTextColor(0);
   }
 }
@@ -238,18 +249,18 @@ function drawIdentityBlock(doc: jsPDF, b: CandidateBundle, startY: number): numb
 }
 
 async function loadBundle(candidateId: string): Promise<CandidateBundle | null> {
-  const { data: candidate } = await supabase
+  const { data: candidate } = await localDataApi
     .from("candidates")
     .select("*")
     .eq("id", candidateId)
     .single();
   if (!candidate) return null;
-  const { data: selection } = await supabase
+  const { data: selection } = await localDataApi
     .from("selections")
     .select("*")
     .eq("id", candidate.selection_id)
     .single();
-  const { data: exam } = await supabase
+  const { data: exam } = await localDataApi
     .from("exams")
     .select("*")
     .eq("candidate_id", candidateId)
@@ -260,20 +271,30 @@ async function loadBundle(candidateId: string): Promise<CandidateBundle | null> 
   let cardiology: any = null;
   let radiology: any = null;
   if (exam) {
-    const [{ data: s }, { data: ms }, { data: mm }, { data: card }, { data: rad }] = await Promise.all([
-      supabase.from("exam_sections").select("*").eq("exam_id", exam.id),
-      supabase.from("medical_summary").select("*").eq("exam_id", exam.id).maybeSingle(),
-      supabase.from("medical_measurements").select("*").eq("exam_id", exam.id).maybeSingle(),
-      supabase.from("exam_cardiology").select("*").eq("exam_id", exam.id).maybeSingle(),
-      supabase.from("exam_radiology").select("*").eq("exam_id", exam.id).maybeSingle(),
-    ]);
+    const [{ data: s }, { data: ms }, { data: mm }, { data: card }, { data: rad }] =
+      await Promise.all([
+        localDataApi.from("exam_sections").select("*").eq("exam_id", exam.id),
+        localDataApi.from("medical_summary").select("*").eq("exam_id", exam.id).maybeSingle(),
+        localDataApi.from("medical_measurements").select("*").eq("exam_id", exam.id).maybeSingle(),
+        localDataApi.from("exam_cardiology").select("*").eq("exam_id", exam.id).maybeSingle(),
+        localDataApi.from("exam_radiology").select("*").eq("exam_id", exam.id).maybeSingle(),
+      ]);
     sections = s ?? [];
     summary = ms;
     measurements = mm;
     cardiology = card;
     radiology = rad;
   }
-  return { selection: selection!, candidate, exam, sections, summary, measurements, cardiology, radiology };
+  return {
+    selection: selection!,
+    candidate,
+    exam,
+    sections,
+    summary,
+    measurements,
+    cardiology,
+    radiology,
+  };
 }
 
 function sectionsBySection(b: CandidateBundle, key: string): SectionRow | undefined {
@@ -394,7 +415,10 @@ function drawResumePage(doc: jsPDF, b: CandidateBundle) {
       ["KESWA", safe(s.keswa_status ?? ex.keswa_status, "-")],
       ["Hasil Akhir", safe(s.final_result ?? ex.final_result, "-")],
       ["Nilai Akhir", safe(s.final_score ?? ex.final_score, "-")],
-      ["Jumlah B / C / K1 / K2", `${safe(s.count_b, "0")} / ${safe(s.count_c, "0")} / ${safe(s.count_k1, "0")} / ${safe(s.count_k2, "0")}`],
+      [
+        "Jumlah B / C / K1 / K2",
+        `${safe(s.count_b, "0")} / ${safe(s.count_c, "0")} / ${safe(s.count_k1, "0")} / ${safe(s.count_k2, "0")}`,
+      ],
       ["Status Pemeriksaan", safe(ex.exam_status, "-")],
       ["Difinalisasi", ex.finalized_at ? `${fmtDate(ex.finalized_at)}` : "Belum"],
     ],
@@ -436,8 +460,8 @@ async function recordExport(args: {
   error?: string;
   filter?: any;
 }) {
-  const { data: u } = await supabase.auth.getUser();
-  await supabase.from("document_exports").insert({
+  const { data: u } = await localDataApi.auth.getUser();
+  await localDataApi.from("document_exports").insert({
     selection_id: args.selection_id,
     candidate_id: args.candidate_id ?? null,
     exam_id: args.exam_id ?? null,
@@ -457,16 +481,15 @@ const SECTION_TITLES: Record<string, string> = Object.fromEntries(
   SECTIONS.map((s) => [s.key, s.name]),
 );
 
-export async function exportSectionPDF(
-  candidateId: string,
-  sectionKey: string,
-): Promise<void> {
+export async function exportSectionPDF(candidateId: string, sectionKey: string): Promise<void> {
   const b = await loadBundle(candidateId);
   if (!b) throw new Error("Peserta tidak ditemukan");
   const doc = new jsPDF({ format: "a4", unit: "mm" });
   drawSectionPage(doc, b, sectionKey, SECTION_TITLES[sectionKey] ?? sectionKey);
   if (sectionKey === "ekg_ergo") {
-    const atts = Array.isArray(b.cardiology?.attachments_json) ? b.cardiology!.attachments_json : [];
+    const atts = Array.isArray(b.cardiology?.attachments_json)
+      ? b.cardiology!.attachments_json
+      : [];
     await drawAttachmentPages(doc, b, "EKG / Ergo", atts);
   } else if (sectionKey === "radiologi_ro") {
     const atts = Array.isArray(b.radiology?.attachments_json) ? b.radiology!.attachments_json : [];
@@ -542,7 +565,9 @@ export async function exportFullPackagePDF(candidateId: string): Promise<void> {
   }
 
   // Lampiran gambar EKG & Rontgen
-  const ekgAtts = Array.isArray(b.cardiology?.attachments_json) ? b.cardiology!.attachments_json : [];
+  const ekgAtts = Array.isArray(b.cardiology?.attachments_json)
+    ? b.cardiology!.attachments_json
+    : [];
   await drawAttachmentPages(doc, b, "EKG / Ergo", ekgAtts);
   const roAtts = Array.isArray(b.radiology?.attachments_json) ? b.radiology!.attachments_json : [];
   await drawAttachmentPages(doc, b, "Rontgen", roAtts);
@@ -581,7 +606,7 @@ export async function exportRekapMassalPDF(
   rows: RekapPdfRow[],
   options: { title?: string; documentType?: string; filter?: any } = {},
 ): Promise<void> {
-  const { data: selection } = await supabase
+  const { data: selection } = await localDataApi
     .from("selections")
     .select("*")
     .eq("id", selectionId)
@@ -600,10 +625,21 @@ export async function exportRekapMassalPDF(
     theme: "grid",
     headStyles: { fillColor: [30, 60, 110], textColor: 255, fontSize: 8 },
     styles: { fontSize: 8, font: FONT, cellPadding: 1.2 },
-    head: [[
-      "No", "No Test", "Nama", "Pok", "Panda", "KESUM", "KESWA",
-      "Hasil", "Nilai", "Ket. K1", "Ket. K2/TMS",
-    ]],
+    head: [
+      [
+        "No",
+        "No Test",
+        "Nama",
+        "Pok",
+        "Panda",
+        "KESUM",
+        "KESWA",
+        "Hasil",
+        "Nilai",
+        "Ket. K1",
+        "Ket. K2/TMS",
+      ],
+    ],
     body: rows.map((r) => [
       r.no,
       safe(r.test_number),

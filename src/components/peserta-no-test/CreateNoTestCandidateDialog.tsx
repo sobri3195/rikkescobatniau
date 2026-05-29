@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +18,16 @@ import { createCandidateLocal } from "@/lib/services/candidateService";
 import { isLocalMode } from "@/lib/storage-mode";
 import { listActiveSelections } from "@/lib/services/selectionService";
 
-type Selection = { id: string; name?: string; selection_name?: string; year_label?: string | null; year?: string | number | null; type?: string | null; selection_type?: string | null; status?: string | null };
+type Selection = {
+  id: string;
+  name?: string;
+  selection_name?: string;
+  year_label?: string | null;
+  year?: string | number | null;
+  type?: string | null;
+  selection_type?: string | null;
+  status?: string | null;
+};
 
 type Props = {
   open: boolean;
@@ -51,17 +66,28 @@ export function CreateNoTestCandidateDialog({ open, onOpenChange, onCreated }: P
       const db = getDb() as any;
       const defaultSelectionId = db.settings?.active_selection_id;
       const nextSelection =
-        (defaultSelectionId && rows.some((s) => s.id === defaultSelectionId) ? defaultSelectionId : "")
-        || (rows.length === 1 ? rows[0].id : "")
-        || form.selection_id;
+        (defaultSelectionId && rows.some((s) => s.id === defaultSelectionId)
+          ? defaultSelectionId
+          : "") ||
+        (rows.length === 1 ? rows[0].id : "") ||
+        form.selection_id;
       setForm((f) => ({ ...f, selection_id: nextSelection }));
 
       if (import.meta.env.DEV && rows.length === 0) {
-        console.log("[CreateNoTestCandidateDialog] localStorage key exists:", !!localStorage.getItem("rikkes_tni_au_local_db_v1"));
-        console.log("[CreateNoTestCandidateDialog] total selections:", (db.selections ?? []).length);
+        console.log(
+          "[CreateNoTestCandidateDialog] localStorage key exists:",
+          !!localStorage.getItem("rikkes_tni_au_local_db_v1"),
+        );
+        console.log(
+          "[CreateNoTestCandidateDialog] total selections:",
+          (db.selections ?? []).length,
+        );
         console.log("[CreateNoTestCandidateDialog] active selections:", rows.length);
         console.log("[CreateNoTestCandidateDialog] selected selectionId:", nextSelection);
-        console.log("[CreateNoTestCandidateDialog] settings.active_selection_id:", defaultSelectionId);
+        console.log(
+          "[CreateNoTestCandidateDialog] settings.active_selection_id:",
+          defaultSelectionId,
+        );
       }
     });
   }, [open]);
@@ -76,14 +102,17 @@ export function CreateNoTestCandidateDialog({ open, onOpenChange, onCreated }: P
     if (!form.full_name.trim()) return toast.error("Nama lengkap wajib diisi");
 
     const activeSelectionIds = new Set((await listActiveSelections()).map((s: any) => s.id));
-    if (!activeSelectionIds.has(form.selection_id)) return toast.error("Pilih seleksi terlebih dahulu.");
+    if (!activeSelectionIds.has(form.selection_id))
+      return toast.error("Pilih seleksi terlebih dahulu.");
 
     setSaving(true);
     try {
       const tn = form.test_number.trim();
       if (isLocalMode) {
         const db = getDb() as any;
-        const dup = (db.candidates ?? []).find((c: any) => c.selection_id === form.selection_id && c.test_number === tn);
+        const dup = (db.candidates ?? []).find(
+          (c: any) => c.selection_id === form.selection_id && c.test_number === tn,
+        );
         if (tn && dup) {
           setSaving(false);
           return toast.error("No Test sudah dipakai pada seleksi ini");
@@ -93,14 +122,24 @@ export function CreateNoTestCandidateDialog({ open, onOpenChange, onCreated }: P
           full_name: form.full_name.trim(),
           test_number: tn,
         });
-        await logAudit({ action: tn ? "create_candidate" : "create_candidate_without_test_number", module: "peserta_tanpa_no_test", record_id: cand.id, candidate_id: cand.id, after: cand });
-        toast.success(tn ? `Peserta dibuat dengan No Test ${tn}` : `Peserta dibuat dengan Temporary ID ${cand.temporary_id ?? "(TMP)"}`);
+        await logAudit({
+          action: tn ? "create_candidate" : "create_candidate_without_test_number",
+          module: "peserta_tanpa_no_test",
+          record_id: cand.id,
+          candidate_id: cand.id,
+          after: cand,
+        });
+        toast.success(
+          tn
+            ? `Peserta dibuat dengan No Test ${tn}`
+            : `Peserta dibuat dengan Temporary ID ${cand.temporary_id ?? "(TMP)"}`,
+        );
         setForm({ ...INITIAL, selection_id: form.selection_id });
         onCreated();
         onOpenChange(false);
         return;
       }
-      throw new Error("Mode Supabase tidak didukung");
+      throw new Error("Mode remote tidak didukung");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Gagal menyimpan";
       toast.error(msg);
@@ -119,7 +158,9 @@ export function CreateNoTestCandidateDialog({ open, onOpenChange, onCreated }: P
         <form onSubmit={submit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="md:col-span-2 space-y-1">
-              <Label className="text-xs">Seleksi <span className="text-rose-600">*</span></Label>
+              <Label className="text-xs">
+                Seleksi <span className="text-rose-600">*</span>
+              </Label>
               <select
                 className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
                 value={form.selection_id}
@@ -129,15 +170,24 @@ export function CreateNoTestCandidateDialog({ open, onOpenChange, onCreated }: P
                 <option value="">— Pilih Seleksi —</option>
                 {selections.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {(s.selection_name ?? s.name) || "Tanpa Nama"} — TA {s.year ?? s.year_label ?? "-"} · {s.type ?? s.selection_type ?? "-"}
+                    {(s.selection_name ?? s.name) || "Tanpa Nama"} — TA{" "}
+                    {s.year ?? s.year_label ?? "-"} · {s.type ?? s.selection_type ?? "-"}
                   </option>
                 ))}
               </select>
-              {!selections.length && <p className="text-xs text-amber-600">Belum ada seleksi aktif. Buat seleksi terlebih dahulu sebelum menambah peserta.</p>}
+              {!selections.length && (
+                <p className="text-xs text-amber-600">
+                  Belum ada seleksi aktif. Buat seleksi terlebih dahulu sebelum menambah peserta.
+                </p>
+              )}
             </div>
 
             <F label="Nama Lengkap *">
-              <Input value={form.full_name} onChange={(e) => set("full_name", e.target.value)} required />
+              <Input
+                value={form.full_name}
+                onChange={(e) => set("full_name", e.target.value)}
+                required
+              />
             </F>
             <div className="space-y-1">
               <Label className="text-xs">Jenis Kelamin *</Label>
@@ -151,16 +201,46 @@ export function CreateNoTestCandidateDialog({ open, onOpenChange, onCreated }: P
               </select>
             </div>
 
-            <F label="Pangkat"><Input value={form.rank} onChange={(e) => set("rank", e.target.value)} /></F>
-            <F label="NRP / NIP"><Input value={form.nrp_nip} onChange={(e) => set("nrp_nip", e.target.value)} /></F>
-            <F label="Satuan / Kesatuan"><Input value={form.unit_position} onChange={(e) => set("unit_position", e.target.value)} /></F>
-            <F label="Pok / Korp"><Input value={form.pok_korp} onChange={(e) => set("pok_korp", e.target.value)} /></F>
-            <F label="Panda"><Input value={form.panda} onChange={(e) => set("panda", e.target.value)} /></F>
-            <F label="Kelompok"><Input value={form.group_name} onChange={(e) => set("group_name", e.target.value)} /></F>
-            <F label="Tempat Lahir"><Input value={form.birth_place} onChange={(e) => set("birth_place", e.target.value)} /></F>
-            <F label="Tanggal Lahir"><Input type="date" value={form.birth_date} onChange={(e) => set("birth_date", e.target.value)} /></F>
-            <F label="Nomor HP"><Input value={form.phone} onChange={(e) => set("phone", e.target.value)} /></F>
-            <F label="Alamat"><Input value={form.address} onChange={(e) => set("address", e.target.value)} /></F>
+            <F label="Pangkat">
+              <Input value={form.rank} onChange={(e) => set("rank", e.target.value)} />
+            </F>
+            <F label="NRP / NIP">
+              <Input value={form.nrp_nip} onChange={(e) => set("nrp_nip", e.target.value)} />
+            </F>
+            <F label="Satuan / Kesatuan">
+              <Input
+                value={form.unit_position}
+                onChange={(e) => set("unit_position", e.target.value)}
+              />
+            </F>
+            <F label="Pok / Korp">
+              <Input value={form.pok_korp} onChange={(e) => set("pok_korp", e.target.value)} />
+            </F>
+            <F label="Panda">
+              <Input value={form.panda} onChange={(e) => set("panda", e.target.value)} />
+            </F>
+            <F label="Kelompok">
+              <Input value={form.group_name} onChange={(e) => set("group_name", e.target.value)} />
+            </F>
+            <F label="Tempat Lahir">
+              <Input
+                value={form.birth_place}
+                onChange={(e) => set("birth_place", e.target.value)}
+              />
+            </F>
+            <F label="Tanggal Lahir">
+              <Input
+                type="date"
+                value={form.birth_date}
+                onChange={(e) => set("birth_date", e.target.value)}
+              />
+            </F>
+            <F label="Nomor HP">
+              <Input value={form.phone} onChange={(e) => set("phone", e.target.value)} />
+            </F>
+            <F label="Alamat">
+              <Input value={form.address} onChange={(e) => set("address", e.target.value)} />
+            </F>
 
             <div className="md:col-span-2 space-y-1">
               <Label className="text-xs">No Test (opsional — kosongkan jika belum ada)</Label>
@@ -170,7 +250,9 @@ export function CreateNoTestCandidateDialog({ open, onOpenChange, onCreated }: P
                 placeholder="Boleh kosong; Temporary ID akan dibuat otomatis"
               />
               <p className="text-[11px] text-slate-500">
-                Jika kosong, sistem akan membuat <span className="font-mono">TMP-YYYYMMDD-NNNN</span> otomatis dan peserta langsung masuk antrian Rontgen & EKG.
+                Jika kosong, sistem akan membuat{" "}
+                <span className="font-mono">TMP-YYYYMMDD-NNNN</span> otomatis dan peserta langsung
+                masuk antrian Rontgen & EKG.
               </p>
             </div>
 
@@ -186,7 +268,12 @@ export function CreateNoTestCandidateDialog({ open, onOpenChange, onCreated }: P
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={saving}
+            >
               Batal
             </Button>
             <Button type="submit" disabled={saving || !form.selection_id}>

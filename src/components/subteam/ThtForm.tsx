@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,7 +15,7 @@ export function ThtForm({ examId, candidateId, readOnly, canEditAfterSubmit }: {
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const { data } = await supabase.from("exam_ent").select("*").eq("exam_id", examId).maybeSingle();
+    const { data } = await localDataApi.from("exam_ent").select("*").eq("exam_id", examId).maybeSingle();
     let base: any = data ?? {
       ear_right: "", ear_left: "", nose: "", throat: "", larynx: "",
       hearing_notes: "", conclusion: "", qualification_u: "",
@@ -24,7 +24,7 @@ export function ThtForm({ examId, candidateId, readOnly, canEditAfterSubmit }: {
     // Backward compatibility: pull whisper data previously saved under
     // mata_tht.form_data_json (bisikan_ad / bisikan_as) if THT row has none.
     if (!base.whisper_ad && !base.whisper_as) {
-      const { data: legacy } = await supabase
+      const { data: legacy } = await localDataApi
         .from("rikkes_form_sections")
         .select("form_data_json")
         .eq("exam_id", examId)
@@ -45,7 +45,7 @@ export function ThtForm({ examId, candidateId, readOnly, canEditAfterSubmit }: {
     if (!examId) return;
     setBusy(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
+      const { data: u } = await localDataApi.auth.getUser();
       const payload = {
         exam_id: examId,
         candidate_id: candidateId,
@@ -64,8 +64,8 @@ export function ThtForm({ examId, candidateId, readOnly, canEditAfterSubmit }: {
         status,
       };
       const q = row?.id
-        ? supabase.from("exam_ent").update(payload).eq("id", row.id)
-        : supabase.from("exam_ent").insert(payload);
+        ? localDataApi.from("exam_ent").update(payload).eq("id", row.id)
+        : localDataApi.from("exam_ent").insert(payload);
       const { error } = await q;
       if (error) throw error;
       await syncRikkesGroupStatus({

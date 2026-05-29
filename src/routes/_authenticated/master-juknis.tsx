@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -72,7 +72,7 @@ function MasterJuknisPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data } = await localDataApi
       .from("juknis_parameter_rules" as any)
       .select("*")
       .order("parameter_key")
@@ -105,11 +105,11 @@ function MasterJuknisPage() {
         sort_order: editing.sort_order ?? 0,
       };
       if (editing.id) {
-        const { error } = await supabase.from("juknis_parameter_rules" as any).update(payload).eq("id", editing.id);
+        const { error } = await localDataApi.from("juknis_parameter_rules" as any).update(payload).eq("id", editing.id);
         if (error) throw error;
         await logAudit({ action: "update_juknis_rule", module: "master_juknis", record_id: editing.id, after: payload });
       } else {
-        const { data, error } = await supabase.from("juknis_parameter_rules" as any).insert(payload).select().single();
+        const { data, error } = await localDataApi.from("juknis_parameter_rules" as any).insert(payload).select().single();
         if (error) throw error;
         await logAudit({ action: "create_juknis_rule", module: "master_juknis", record_id: (data as any).id, after: payload });
       }
@@ -123,7 +123,7 @@ function MasterJuknisPage() {
 
   async function remove(r: Rule) {
     if (!confirm(`Hapus parameter "${r.parameter_key}"?`)) return;
-    const { error } = await supabase.from("juknis_parameter_rules" as any).delete().eq("id", r.id);
+    const { error } = await localDataApi.from("juknis_parameter_rules" as any).delete().eq("id", r.id);
     if (error) { toast.error(error.message); return; }
     await logAudit({ action: "delete_juknis_rule", module: "master_juknis", record_id: r.id });
     toast.success("Dihapus");

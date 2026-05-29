@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 
 type Cand = {
   full_name?: string | null;
@@ -17,7 +17,7 @@ type Cand = {
 export async function fetchSubteam(sectionKey: string, selectionId?: string | null) {
   // Try selection-scoped first, then fallback to global (selection_id null)
   if (selectionId) {
-    const { data } = await supabase
+    const { data } = await localDataApi
       .from("medical_subteams")
       .select("*")
       .eq("section_key", sectionKey)
@@ -26,7 +26,7 @@ export async function fetchSubteam(sectionKey: string, selectionId?: string | nu
       .maybeSingle();
     if (data) return data;
   }
-  const { data } = await supabase
+  const { data } = await localDataApi
     .from("medical_subteams")
     .select("*")
     .eq("section_key", sectionKey)
@@ -38,7 +38,7 @@ export async function fetchSubteam(sectionKey: string, selectionId?: string | nu
 
 async function fetchSelectionName(selectionId?: string | null) {
   if (!selectionId) return "";
-  const { data } = await supabase.from("selections").select("name").eq("id", selectionId).maybeSingle();
+  const { data } = await localDataApi.from("selections").select("name").eq("id", selectionId).maybeSingle();
   return (data as any)?.name ?? "";
 }
 

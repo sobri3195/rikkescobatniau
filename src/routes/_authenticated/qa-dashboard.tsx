@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Activity, AlertTriangle, CheckCircle2, XCircle, ClipboardCheck, FileWarning } from "lucide-react";
@@ -32,12 +32,12 @@ function QADashboard() {
   useEffect(() => {
     (async () => {
       const [tc, runs, sess, issues, failed, crit] = await Promise.all([
-        supabase.from("qa_test_cases").select("id", { count: "exact", head: true }),
-        supabase.from("qa_test_runs").select("id,result,test_case_id,run_at"),
-        supabase.from("uat_sessions").select("id,status"),
-        supabase.from("qa_issues").select("id,severity,status"),
-        supabase.from("qa_test_runs").select("id,test_case_id,result,run_at,actual_result").eq("result", "Failed").order("run_at", { ascending: false }).limit(8),
-        supabase.from("qa_issues").select("id,issue_code,title,severity,status,created_at").eq("severity", "Critical").in("status", ["Open", "In Progress"]).order("created_at", { ascending: false }).limit(8),
+        localDataApi.from("qa_test_cases").select("id", { count: "exact", head: true }),
+        localDataApi.from("qa_test_runs").select("id,result,test_case_id,run_at"),
+        localDataApi.from("uat_sessions").select("id,status"),
+        localDataApi.from("qa_issues").select("id,severity,status"),
+        localDataApi.from("qa_test_runs").select("id,test_case_id,result,run_at,actual_result").eq("result", "Failed").order("run_at", { ascending: false }).limit(8),
+        localDataApi.from("qa_issues").select("id,issue_code,title,severity,status,created_at").eq("severity", "Critical").in("status", ["Open", "In Progress"]).order("created_at", { ascending: false }).limit(8),
       ]);
       const runsData = runs.data ?? [];
       // Latest run per case

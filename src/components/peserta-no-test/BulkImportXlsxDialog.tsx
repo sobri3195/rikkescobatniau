@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { createSelection, listActiveSelections } from "@/lib/selectionService";
 import { logAudit } from "@/lib/audit";
 import { createCandidateLocal } from "@/lib/services/candidateService";
@@ -141,7 +141,7 @@ export function BulkImportXlsxDialog({
 
     try {
       // Preload existing for duplicate check (selection-scoped)
-      const { data: existing } = await supabase
+      const { data: existing } = await localDataApi
         .from("candidates")
         .select("nrp_nip,full_name,birth_date,bag_number,serial_number,test_number")
         .eq("selection_id", selId)
@@ -149,7 +149,7 @@ export function BulkImportXlsxDialog({
       const exNrp = new Set((existing ?? []).map((r: any) => (r.nrp_nip ?? "").trim()).filter(Boolean));
       const exTn = new Set((existing ?? []).map((r: any) => (r.test_number ?? "").trim()).filter(Boolean));
 
-      const { data: u } = await supabase.auth.getUser();
+      const { data: u } = await localDataApi.auth.getUser();
       const uid = u.user?.id ?? null;
 
       let inserted = 0;
@@ -158,7 +158,7 @@ export function BulkImportXlsxDialog({
       const errors: string[] = [];
 
       // Create import session for rollback tracking
-      const { data: sessionRow } = await supabase
+      const { data: sessionRow } = await localDataApi
         .from("import_sessions")
         .insert({
           selection_id: selId,
@@ -232,7 +232,7 @@ export function BulkImportXlsxDialog({
       }
 
       if (sessionId) {
-        await supabase.from("import_sessions").update({
+        await localDataApi.from("import_sessions").update({
           success_rows: inserted,
           failed_rows: failed,
           skipped_rows: skipped,

@@ -1,10 +1,8 @@
 import {
-  generateId,
+  DEFAULT_EXAM_SECTIONS,
   getDb,
-  getLocalSession,
-  isSectionCompleted,
-  normalizeSectionKey,
   nowIso,
+  repairLocalDbRelations as repairCoreLocalDbRelations,
   saveDb,
 } from "@/lib/localDb";
 import { buildRekapAplikasiRowLocal } from "@/lib/rekap-aplikasi-local";
@@ -364,243 +362,91 @@ export function emitLocalDbChanged(moduleName = "localDb_changed") {
   window.dispatchEvent(new CustomEvent("localDbChanged", { detail: { moduleName } }));
 }
 
-export function subscribeLocalDbChanged(callback: LocalDbChangedCallback) {
-  if (typeof window === "undefined") return () => {};
-  const handler = (event: Event) =>
-    callback((event as CustomEvent)?.detail?.moduleName ?? "localDb_changed");
-  window.addEventListener("localDbChanged", handler as EventListener);
-  return () => window.removeEventListener("localDbChanged", handler as EventListener);
+function refreshExam(examId: string) {
+  recalculateExamProgressLocal(examId);
+  recalculateHariHStageLocal(examId);
 }
 
 export function syncCandidateRelationsLocal(candidateId: string) {
   const db = getDb() as any;
-  const exam = syncCandidateInDb(db, candidateId);
-  if (exam) {
-    recalculateProgressInDb(db, exam.id);
-    recalculateStageInDb(db, exam.id);
+  repairCoreLocalDbRelations(db);
+  const candidate = (db.candidates ?? []).find((item: any) => item.id === candidateId);
+  if (candidate) {
+    for (const exam of db.exams ?? []) {
+      if (exam.candidate_id !== candidate.id) continue;
+      exam.selection_id = candidate.selection_id ?? exam.selection_id ?? null;
+      exam.updated_at = nowIso();
+      for (const section of db.exam_sections ?? []) {
+        if (section.exam_id !== exam.id) continue;
+        section.candidate_id = candidate.id;
+        section.selection_id = exam.selection_id ?? candidate.selection_id ?? null;
+        section.updated_at = nowIso();
+      }
+    }
   }
-  saveDb(db);
-  emitLocalDbChanged("candidate_updated");
-  return exam;
+  saveDb(db, "syncCandidateRelationsLocal");
+  (db.exams ?? [])
+    .filter((exam: any) => exam.candidate_id === candidateId)
+    .forEach((exam: any) => refreshExam(exam.id));
+  return candidate ?? null;
 }
 
 export function syncExamRelationsLocal(examId: string) {
   const db = getDb() as any;
-  const exam = (db.exams ?? []).find((e: any) => e.id === examId);
-  if (!exam) return null;
-  const candidate = (db.candidates ?? []).find((c: any) => c.id === exam.candidate_id);
-  if (candidate) syncCandidateInDb(db, candidate.id);
-  recalculateProgressInDb(db, examId);
-  recalculateStageInDb(db, examId);
-  saveDb(db);
-  emitLocalDbChanged("exam_updated");
-  return exam;
+  repairCoreLocalDbRelations(db);
+  const exam = (db.exams ?? []).find((item: any) => item.id === examId);
+  const candidate = (db.candidates ?? []).find((item: any) => item.id === exam?.candidate_id);
+  if (exam) {
+    exam.selection_id = candidate?.selection_id ?? exam.selection_id ?? null;
+    for (const [sectionKey, label] of DEFAULT_EXAM_SECTIONS) {
+      let section = (db.exam_sections ?? []).find(
+        (item: any) => item.exam_id === exam.id && item.section_key === sectionKey,
+      );
+      if (!section) {
+        section = {
+          id: `section_${Math.random().toString(36).slice(2, 10)}`,
+          exam_id: exam.id,
+          section_key: sectionKey,
+          section_label: label,
+          section_status: "Draft",
+          is_required: sectionKey !== "neurologi_subtim",
+          form_data_json: {},
+          created_at: nowIso(),
+        };
+        db.exam_sections.push(section);
+      }
+      section.candidate_id = exam.candidate_id;
+      section.selection_id = exam.selection_id;
+      section.updated_at = nowIso();
+    }
+  }
+  saveDb(db, "syncExamRelationsLocal");
+  if (exam) refreshExam(exam.id);
+  return exam ?? null;
 }
 
 export function syncSelectionRelationsLocal(selectionId: string) {
   const db = getDb() as any;
-  for (const candidate of db.candidates ?? [])
-    if (candidate.selection_id === selectionId || !candidate.selection_id)
-      syncCandidateInDb(db, candidate.id);
-  for (const exam of db.exams ?? [])
-    if (exam.selection_id === selectionId) {
-      recalculateProgressInDb(db, exam.id);
-      recalculateStageInDb(db, exam.id);
-    }
-  saveDb(db);
-  emitLocalDbChanged("selection_updated");
+  repairCoreLocalDbRelations(db);
+  for (const candidate of db.candidates ?? []) {
+    if (candidate.selection_id === selectionId && !candidate.is_deleted)
+      syncCandidateRelationsLocal(candidate.id);
+  }
+  return selectionId;
 }
 
-export function syncAllLocalRelations(options: SyncAllOptions = {}) {
+export function syncAllLocalRelations() {
   const db = getDb() as any;
-  for (const candidate of db.candidates ?? []) syncCandidateInDb(db, candidate.id);
-  for (const exam of db.exams ?? []) {
-    recalculateProgressInDb(db, exam.id);
-    recalculateStageInDb(db, exam.id);
-  }
-  if (options.auditAction) {
-    appendAudit(db, options.auditAction, {
-      module: options.module ?? "localDb_sync",
-      after_data_json: { synced_at: nowIso() },
-    });
-  }
-  saveDb(db);
-  emitLocalDbChanged("all_synced");
+  repairCoreLocalDbRelations(db);
+  saveDb(db, "syncAllLocalRelations");
+  for (const exam of db.exams ?? []) refreshExam(exam.id);
   return db;
 }
 
-export function recalculateExamProgressLocal(examId: string) {
-  const db = getDb() as any;
-  const exam = recalculateProgressInDb(db, examId);
-  saveDb(db);
-  emitLocalDbChanged("progress_updated");
-  return exam;
-}
-
-export function recalculateHariHStageLocal(examId: string) {
-  const db = getDb() as any;
-  const exam = recalculateStageInDb(db, examId);
-  saveDb(db);
-  emitLocalDbChanged("stage_updated");
-  return exam;
-}
-
-export function buildRekapRowLocal(candidateId: string) {
-  const db = getDb() as any;
-  const candidate = (db.candidates ?? []).find((c: any) => c.id === candidateId);
-  const exam = (db.exams ?? []).find((e: any) => e.candidate_id === candidateId && !e.is_deleted);
-  if (!candidate || !exam) return null;
-  const row = buildRekapAplikasiRowLocal(candidate.id, exam.id);
-  if (!row) return null;
-  return {
-    ...row,
-    selection: (db.selections ?? []).find((s: any) => s.id === candidate.selection_id) ?? null,
-    sections: (db.exam_sections ?? []).filter((s: any) => s.exam_id === exam.id),
-  };
-}
-
-export function rebuildRekapCacheLocal() {
-  const db = getDb() as any;
-  const rows = (db.candidates ?? [])
-    .filter((c: any) => !c.is_deleted)
-    .map((c: any) => buildRekapRowLocal(c.id))
-    .filter(Boolean);
-  db.rekap_aplikasi_rows = rows;
-  appendAudit(db, "rebuild_rekap", {
-    module: "Rekap Aplikasi Local",
-    after_data_json: { total_rows: rows.length },
-  });
-  saveDb(db);
-  emitLocalDbChanged("rekap_rebuilt");
-  return rows;
-}
-
-export function buildIncompleteDataLocal() {
-  const db = getDb() as any;
-  const requiredCandidateFields = [
-    "full_name",
-    "gender",
-    "rank",
-    "nrp_nip",
-    "unit_position",
-    "panda",
-    "birth_place",
-    "birth_date",
-  ];
-  const rows: any[] = [];
-  for (const candidate of db.candidates ?? []) {
-    if (candidate.is_deleted) continue;
-    const exam = (db.exams ?? []).find(
-      (e: any) => e.candidate_id === candidate.id && !e.is_deleted,
-    );
-    const issues: string[] = [];
-    for (const field of requiredCandidateFields)
-      if (!String(candidate[field] ?? "").trim()) issues.push(`candidate.${field} kosong`);
-    if (!exam) issues.push("candidate tanpa exam");
-    if (exam) {
-      const sections = (db.exam_sections ?? []).filter((s: any) => s.exam_id === exam.id);
-      if (!sections.length) issues.push("exam tanpa section");
-      for (const section of sections.filter((s: any) => s.is_required !== false))
-        if (!isDone(section.section_status))
-          issues.push(`${section.section_label ?? section.section_key} belum submitted/approved`);
-      if (
-        !isDone(
-          sections.find((s: any) => normalizeSectionKey(s.section_key) === "ekg")?.section_status,
-        )
-      )
-        issues.push("EKG belum selesai");
-      if (
-        !isDone(
-          sections.find((s: any) => normalizeSectionKey(s.section_key) === "rontgen")
-            ?.section_status,
-        )
-      )
-        issues.push("Rontgen belum selesai");
-      if (
-        (exam.exam_status === "Finalized" || exam.hari_h_stage === "Finalized") &&
-        missingTestNumber(candidate)
-      )
-        issues.push("no test kosong untuk final");
-    }
-    if (issues.length)
-      rows.push({
-        id: `incomplete_${candidate.id}`,
-        candidate_id: candidate.id,
-        exam_id: exam?.id ?? null,
-        selection_id: candidate.selection_id ?? null,
-        full_name: candidate.full_name ?? "-",
-        issues,
-        issue_count: issues.length,
-        updated_at: nowIso(),
-      });
-  }
-  db.incomplete_data_rows = rows;
-  saveDb(db);
-  emitLocalDbChanged("incomplete_data_updated");
-  return rows;
-}
-
-export function buildDashboardSummaryLocal() {
-  const db = getDb() as any;
-  const activeSelections = (db.selections ?? []).filter(
-    (s: any) =>
-      !s.is_deleted &&
-      !["deleted", "inactive"].includes(String(s.status ?? "active").toLowerCase()),
-  );
-  const candidates = (db.candidates ?? []).filter((c: any) => !c.is_deleted && !c.deleted_at);
-  const exams = (db.exams ?? []).filter((e: any) => !e.is_deleted && !e.deleted_at);
-  const incomplete = buildIncompleteDataLocal();
-  const stageCount = (text: string) =>
-    exams.filter((e: any) =>
-      String(e.hari_h_stage ?? "")
-        .toLowerCase()
-        .includes(text),
-    ).length;
-  const summary = {
-    totalSelectionsActive: activeSelections.length,
-    totalCandidates: candidates.length,
-    inProgress: exams.filter((e: any) => String(e.exam_status ?? "").toLowerCase() !== "finalized")
-      .length,
-    waitingEkg: stageCount("menunggu ekg"),
-    waitingRontgen: stageCount("menunggu rontgen"),
-    screening: stageCount("screening"),
-    subteam: stageCount("subtim"),
-    review: exams.filter((e: any) =>
-      String(e.hari_h_stage ?? e.exam_status ?? "")
-        .toLowerCase()
-        .includes("review"),
-    ).length,
-    finalized: exams.filter((e: any) =>
-      String(e.hari_h_stage ?? e.exam_status ?? "")
-        .toLowerCase()
-        .includes("finalized"),
-    ).length,
-    incomplete: incomplete.length,
-    dataBelumLengkap: incomplete.length,
-    updated_at: nowIso(),
-  };
-  const next = getDb() as any;
-  next.dashboard_summary = summary;
-  saveDb(next);
-  emitLocalDbChanged("dashboard_summary_updated");
-  return summary;
-}
-
 export function refreshAllDerivedDataLocal() {
-  const db = syncAllLocalRelations();
-  const rows = (db.candidates ?? [])
-    .filter((c: any) => !c.is_deleted)
-    .map((c: any) => buildRekapRowLocal(c.id))
-    .filter(Boolean);
-  const next = getDb() as any;
-  next.rekap_aplikasi_rows = rows;
-  appendAudit(next, "rebuild_rekap", {
-    module: "Rekap Aplikasi Local",
-    after_data_json: { total_rows: rows.length },
-  });
-  saveDb(next);
-  buildIncompleteDataLocal();
-  const summary = buildDashboardSummaryLocal();
-  emitLocalDbChanged("derived_data_refreshed");
-  return summary;
+  return syncAllLocalRelations();
+}
+
+export function repairLocalDbRelations() {
+  return syncAllLocalRelations();
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { useAuth } from "@/lib/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +39,7 @@ export function PemeriksaanUmumForm({ cand, examId }: Props) {
   const load = useCallback(async () => {
     if (!examId) { setLoading(false); return; }
     setLoading(true);
-    const { data: row } = await supabase.from("exam_general").select("*").eq("exam_id", examId).maybeSingle();
+    const { data: row } = await localDataApi.from("exam_general").select("*").eq("exam_id", examId).maybeSingle();
     if (row) {
       setRowId(row.id);
       setStatus(row.status ?? "Draft");
@@ -71,7 +71,7 @@ export function PemeriksaanUmumForm({ cand, examId }: Props) {
     if (!examId) { toast.error("Exam belum tersedia"); return; }
     setBusy(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
+      const { data: u } = await localDataApi.auth.getUser();
       const payload: any = {
         candidate_id: cand.id,
         exam_id: examId,
@@ -95,11 +95,11 @@ export function PemeriksaanUmumForm({ cand, examId }: Props) {
 
       let result;
       if (rowId) {
-        const { data: row, error } = await supabase.from("exam_general").update(payload).eq("id", rowId).select().single();
+        const { data: row, error } = await localDataApi.from("exam_general").update(payload).eq("id", rowId).select().single();
         if (error) throw error;
         result = row;
       } else {
-        const { data: row, error } = await supabase.from("exam_general").insert(payload).select().single();
+        const { data: row, error } = await localDataApi.from("exam_general").insert(payload).select().single();
         if (error) throw error;
         result = row;
         setRowId(row.id);
@@ -107,12 +107,12 @@ export function PemeriksaanUmumForm({ cand, examId }: Props) {
 
       // sync to medical_measurements height/weight
       if (payload.height_cm != null || payload.weight_kg != null) {
-        const { data: mm } = await supabase.from("medical_measurements").select("id").eq("exam_id", examId).maybeSingle();
+        const { data: mm } = await localDataApi.from("medical_measurements").select("id").eq("exam_id", examId).maybeSingle();
         const mmPatch: any = {};
         if (payload.height_cm != null) mmPatch.height_cm = payload.height_cm;
         if (payload.weight_kg != null) mmPatch.weight_kg = payload.weight_kg;
-        if (mm) await supabase.from("medical_measurements").update(mmPatch).eq("id", mm.id);
-        else await supabase.from("medical_measurements").insert({ ...mmPatch, exam_id: examId, candidate_id: cand.id });
+        if (mm) await localDataApi.from("medical_measurements").update(mmPatch).eq("id", mm.id);
+        else await localDataApi.from("medical_measurements").insert({ ...mmPatch, exam_id: examId, candidate_id: cand.id });
       }
 
       setStatus(result.status);
@@ -134,7 +134,7 @@ export function PemeriksaanUmumForm({ cand, examId }: Props) {
 
   async function returnToDraft() {
     if (!rowId) return;
-    await supabase.from("exam_general").update({ status: "Draft" }).eq("id", rowId);
+    await localDataApi.from("exam_general").update({ status: "Draft" }).eq("id", rowId);
     setStatus("Draft");
     await logAudit({ action: "return_general_to_draft", module: "evaluasi", exam_id: examId, candidate_id: cand.id });
     toast.success("Dikembalikan ke Draft");

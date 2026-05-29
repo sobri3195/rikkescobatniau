@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -24,7 +24,7 @@ export function DeleteCandidateDialog({ open, onOpenChange, candidate, onDone }:
     if (!reason.trim()) return toast.error("Alasan wajib diisi");
     setBusy(true);
     try {
-      const { error } = await supabase.rpc(
+      const { error } = await localDataApi.rpc(
         "soft_delete_candidate_cascade" as never,
         { _candidate_id: candidate.id, _reason: reason.trim() } as never,
       );

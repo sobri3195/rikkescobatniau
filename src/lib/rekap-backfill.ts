@@ -1,7 +1,7 @@
 // One-shot backfill: re-project every previously-submitted rikkes_form_sections
 // row into the legacy exam_sections / medical_summary tables used by Rekap
 // APLIKASI & Laporan Tahap. Safe to run multiple times (idempotent updates).
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { syncGroupToRekap } from "@/lib/rekap-sync";
 
 export type BackfillProgress = {
@@ -14,13 +14,13 @@ export type BackfillProgress = {
 export async function backfillRekapSync(
   opts: { selectionId?: string | null; onProgress?: (p: BackfillProgress) => void } = {},
 ): Promise<BackfillProgress> {
-  let query = supabase
+  let query = localDataApi
     .from("rikkes_form_sections")
     .select("id, exam_id, candidate_id, group_key, status, form_data_json")
     .in("status", ["Submitted", "Approved", "Locked"]);
   if (opts.selectionId) {
     // Filter via candidate selection_id requires join — fetch candidate ids first.
-    const { data: cs } = await supabase
+    const { data: cs } = await localDataApi
       .from("candidates")
       .select("id")
       .eq("selection_id", opts.selectionId);

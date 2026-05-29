@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -60,7 +60,7 @@ function ExportsPage() {
   }
 
   async function loadHistory() {
-    const { data } = await supabase
+    const { data } = await localDataApi
       .from("document_exports")
       .select("*")
       .order("exported_at", { ascending: false })
@@ -69,7 +69,7 @@ function ExportsPage() {
   }
 
   useEffect(() => {
-    supabase.from("selections").select("id,name,year_label").order("created_at", { ascending: false }).then(({ data }) => {
+    localDataApi.from("selections").select("id,name,year_label").order("created_at", { ascending: false }).then(({ data }) => {
       setSels((data ?? []) as Sel[]);
       if (data?.[0]) setSelId(data[0].id);
     });

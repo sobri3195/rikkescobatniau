@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 
 export type HariHStage =
   | "Registrasi Awal"
@@ -54,7 +54,7 @@ export const INIT_STATUS_BADGE: Record<InitialSupportingStatus, string> = {
 /** Recompute hari_h_stage server-side via RPC. Best-effort. */
 export async function recomputeHariHStage(examId: string): Promise<void> {
   if (!examId) return;
-  const { error } = await supabase.rpc(
+  const { error } = await localDataApi.rpc(
     "update_hari_h_stage" as never,
     { p_exam_id: examId } as never,
   );
@@ -81,14 +81,14 @@ export const DEFAULT_HARI_H_SETTINGS: HariHSettings = {
 };
 
 export async function loadHariHSettings(selectionId: string | null): Promise<HariHSettings> {
-  const { data } = await supabase
+  const { data } = await localDataApi
     .from("hari_h_settings" as any)
     .select("*")
     .eq("selection_id", selectionId)
     .maybeSingle();
   if (data) return data as unknown as HariHSettings;
   // Fallback to global (null selection)
-  const { data: g } = await supabase
+  const { data: g } = await localDataApi
     .from("hari_h_settings" as any)
     .select("*")
     .is("selection_id", null)

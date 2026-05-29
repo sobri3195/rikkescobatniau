@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,7 +27,7 @@ function SimulatorPage() {
   const [classes, setClasses] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    supabase.from("formula_rule_sets").select("id,rule_set_name,status,version").order("created_at", { ascending: false })
+    localDataApi.from("formula_rule_sets").select("id,rule_set_name,status,version").order("created_at", { ascending: false })
       .then(({ data }) => setRuleSets((data ?? []) as any));
     loadActiveDefaultRuleSet().then((rs) => { setActiveRs(rs); setSelectedRs(rs); });
   }, []);

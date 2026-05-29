@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,7 +16,7 @@ export function SurgeryForm({ examId, candidateId, readOnly, canEditAfterSubmit 
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const { data } = await supabase.from("exam_surgery").select("*").eq("exam_id", examId).maybeSingle();
+    const { data } = await localDataApi.from("exam_surgery").select("*").eq("exam_id", examId).maybeSingle();
     setRow(data ?? { status: "Draft" });
   }
   useEffect(() => { if (examId) load(); }, [examId]);
@@ -44,7 +44,7 @@ export function SurgeryForm({ examId, candidateId, readOnly, canEditAfterSubmit 
     }
     setBusy(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
+      const { data: u } = await localDataApi.auth.getUser();
       const payload = {
         exam_id: examId, candidate_id: candidateId,
         general_condition: row.general_condition ?? null,
@@ -60,8 +60,8 @@ export function SurgeryForm({ examId, candidateId, readOnly, canEditAfterSubmit 
         status,
       };
       const q = row?.id
-        ? supabase.from("exam_surgery").update(payload).eq("id", row.id)
-        : supabase.from("exam_surgery").insert(payload);
+        ? localDataApi.from("exam_surgery").update(payload).eq("id", row.id)
+        : localDataApi.from("exam_surgery").insert(payload);
       const { error } = await q;
       if (error) throw error;
       await syncRikkesGroupStatus({

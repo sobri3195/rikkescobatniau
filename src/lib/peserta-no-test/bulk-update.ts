@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { supabase } from "@/lib/local-supabase-shim";
+import { localDataApi } from "@/lib/localDataApi";
 import { logAudit } from "@/lib/audit";
 import { refreshAllDerivedDataLocal, syncAllLocalRelations } from "@/lib/services/syncService";
 
@@ -128,7 +128,7 @@ export async function parseAndValidate(file: File): Promise<BulkValidationResult
   const tmpIds = Array.from(new Set(pending.filter((r) => r.temporary_id).map((r) => r.temporary_id)));
   const byTmp = new Map<string, any>();
   if (tmpIds.length > 0) {
-    const { data } = await supabase
+    const { data } = await localDataApi
       .from("candidates")
       .select("id, full_name, temporary_id, test_number, selection_id, nrp_nip, birth_date")
       .in("temporary_id", tmpIds)
@@ -142,7 +142,7 @@ export async function parseAndValidate(file: File): Promise<BulkValidationResult
   ));
   const byNrp = new Map<string, any[]>();
   if (nrpIds.length > 0) {
-    const { data } = await supabase
+    const { data } = await localDataApi
       .from("candidates")
       .select("id, full_name, temporary_id, test_number, selection_id, nrp_nip, birth_date")
       .in("nrp_nip", nrpIds)
@@ -165,7 +165,7 @@ export async function parseAndValidate(file: File): Promise<BulkValidationResult
   if (nameBirthKeys.length > 0) {
     const names = Array.from(new Set(pending.map((r) => r.full_name_match).filter(Boolean)));
     const births = Array.from(new Set(pending.map((r) => r.birth_date_match).filter(Boolean)));
-    const { data } = await supabase
+    const { data } = await localDataApi
       .from("candidates")
       .select("id, full_name, temporary_id, test_number, selection_id, nrp_nip, birth_date")
       .in("full_name", names)
@@ -233,7 +233,7 @@ export async function parseAndValidate(file: File): Promise<BulkValidationResult
   const okRows = rows.filter((r) => (r.status === "ok" || r.status === "warning") && r.selection_id);
   if (okRows.length > 0) {
     const tns = okRows.map((r) => r.no_test_baru);
-    const { data: dups } = await supabase
+    const { data: dups } = await localDataApi
       .from("candidates")
       .select("id, test_number, selection_id, full_name")
       .in("test_number", tns)
@@ -293,13 +293,13 @@ export async function applyBulkUpdate(rows: BulkRow[]): Promise<{ applied: numbe
   const target = rows.filter((r) => r.status === "ok" || r.status === "warning");
   const errors: string[] = [];
   let applied = 0;
-  const { data: u } = await supabase.auth.getUser();
+  const { data: u } = await localDataApi.auth.getUser();
   const now = new Date().toISOString();
 
   for (const r of target) {
     if (!r.candidate_id) continue;
     const before = { test_number: r.current_test_number };
-    const { error } = await supabase
+    const { error } = await localDataApi
       .from("candidates")
       .update({
         test_number: r.no_test_baru,
