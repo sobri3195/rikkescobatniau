@@ -92,13 +92,16 @@ function createEmptyDb() {
   };
 }
 
-export function saveDb(db: LocalDb, moduleName = "localDb") {
-  db.meta = { ...(db.meta ?? {}), updated_at: nowIso() };
-  if (hasLocalStorage()) localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(db));
-  emitLocalDbChanged(moduleName);
+export function saveDb(db: LocalDb) {
+  db.meta.updated_at = nowIso();
+  localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(db));
 }
 export function setDb(db: LocalDb) {
-  saveDb(db, "setDb");
+  saveDb(db);
+  if (typeof window !== "undefined")
+    window.dispatchEvent(
+      new CustomEvent("localDbChanged", { detail: { moduleName: "localDb_set" } }),
+    );
   return db;
 }
 export function initLocalDb() {
@@ -108,7 +111,6 @@ export function initLocalDb() {
 }
 export function getDb(): LocalDb {
   try {
-    if (!hasLocalStorage()) return createEmptyDb();
     const raw = localStorage.getItem(LOCAL_DB_KEY);
     if (!raw) return initLocalDb();
     return migrateLocalDb(JSON.parse(raw));
@@ -118,21 +120,6 @@ export function getDb(): LocalDb {
 }
 export function resetLocalDb() {
   return initLocalDb();
-}
-
-function generateTemporaryIdLocal(db: any) {
-  const date = new Date();
-  const ymd = `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, "0")}${String(date.getUTCDate()).padStart(2, "0")}`;
-  const used = new Set(
-    (db?.candidates ?? []).map((candidate: any) => String(candidate.temporary_id ?? "")),
-  );
-  let index = used.size + 1;
-  let value = `TMP-${ymd}-${String(index).padStart(4, "0")}`;
-  while (used.has(value)) {
-    index += 1;
-    value = `TMP-${ymd}-${String(index).padStart(4, "0")}`;
-  }
-  return value;
 }
 
 export function migrateLocalDb(input?: any): LocalDb {
@@ -359,12 +346,14 @@ export function normalizeSectionStatus(status?: string | null) {
   if (s === "submitted") return "Submitted";
   if (s === "approved") return "Approved";
   if (s === "locked") return "Locked";
+  if (s === "selesai") return "Submitted";
+  if (s === "finalized" || s === "final") return "Finalized";
   if (s === "revision") return "Revision";
   if (s === "optional") return "Optional";
   return "Draft";
 }
 export function isSectionCompleted(status?: string | null) {
-  return ["Submitted", "Approved", "Locked"].includes(normalizeSectionStatus(status));
+  return ["Submitted", "Approved", "Locked", "Finalized"].includes(normalizeSectionStatus(status));
 }
 
 function upsertAuditLog(

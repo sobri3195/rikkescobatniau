@@ -9,7 +9,7 @@ export function loadDashboardSummaryLocal() {
   const exams = (db.exams ?? []).filter((exam: any) => !exam.is_deleted);
   const sections = db.exam_sections ?? [];
   const completedSections = sections.filter((section: any) =>
-    ["Submitted", "Approved", "Locked", "Selesai"].includes(section.section_status),
+    ["Submitted", "Approved", "Locked", "Selesai", "Finalized"].includes(section.section_status),
   ).length;
   return {
     totalSelections: (db.selections ?? []).filter(
