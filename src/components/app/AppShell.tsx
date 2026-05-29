@@ -194,7 +194,13 @@ function AppShellInner() {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("rikkes:sidebar:collapsed") === "1";
   });
-  const [badges, setBadges] = useState({ noTestPending: 0, incomplete: 0, review: 0, importIssues: 0 });
+  const [badges, setBadges] = useState({
+    noTestPending: 0,
+    incomplete: 0,
+    review: 0,
+    importIssues: 0,
+  });
+  const { noTestPending } = badges;
 
   useEffect(() => {
     if (isPatientOnly) return undefined;
@@ -205,7 +211,7 @@ function AppShellInner() {
           !candidate.is_deleted &&
           (!String(candidate.test_number ?? "").trim() || candidate.no_test_missing === true),
       ).length;
-      setNoTestPending(count);
+      setBadges((current) => ({ ...current, noTestPending: count }));
     };
     refreshNoTestBadge();
     return subscribeLocalDbChanged(refreshNoTestBadge);
