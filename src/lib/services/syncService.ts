@@ -1,11 +1,19 @@
 import {
   DEFAULT_EXAM_SECTIONS,
+  generateId,
   getDb,
+  getLocalSession,
+  isSectionCompleted,
+  normalizeSectionKey,
   nowIso,
   repairLocalDbRelations as repairCoreLocalDbRelations,
   saveDb,
 } from "@/lib/localDb";
 import { buildRekapAplikasiRowLocal } from "@/lib/rekap-aplikasi-local";
+
+export { buildDashboardSummaryLocal } from "@/lib/services/dashboardService";
+export { buildIncompleteDataLocal } from "@/lib/services/incompleteDataService";
+export { rebuildRekapCacheLocal } from "@/lib/services/rekapService";
 
 const COMPLETED_STATUSES = ["Submitted", "Approved", "Locked", "Selesai", "Finalized"];
 const MAIN_SECTION_KEYS = [
@@ -360,6 +368,34 @@ function recalculateStageInDb(db: any, examId: string) {
 export function emitLocalDbChanged(moduleName = "localDb_changed") {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent("localDbChanged", { detail: { moduleName } }));
+}
+
+export function subscribeLocalDbChanged(callback: LocalDbChangedCallback) {
+  if (typeof window === "undefined") return () => {};
+  const handler = (event: Event) => {
+    const detail = (event as CustomEvent).detail ?? {};
+    callback(detail.moduleName ?? "localDb_changed");
+  };
+  window.addEventListener("localDbChanged", handler);
+  window.addEventListener("rikkes-localdb-change", handler);
+  return () => {
+    window.removeEventListener("localDbChanged", handler);
+    window.removeEventListener("rikkes-localdb-change", handler);
+  };
+}
+
+export function recalculateExamProgressLocal(examId: string) {
+  const db = getDb() as any;
+  const exam = recalculateProgressInDb(db, examId);
+  if (exam) saveDb(db, "recalculateExamProgressLocal");
+  return exam;
+}
+
+export function recalculateHariHStageLocal(examId: string) {
+  const db = getDb() as any;
+  const exam = recalculateStageInDb(db, examId);
+  if (exam) saveDb(db, "recalculateHariHStageLocal");
+  return exam;
 }
 
 function refreshExam(examId: string) {
