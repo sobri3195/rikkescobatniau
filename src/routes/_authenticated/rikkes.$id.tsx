@@ -50,11 +50,29 @@ import { AttachmentsSheet } from "@/components/hari-h/AttachmentsSheet";
 import { BypassDialog } from "@/components/hari-h/BypassDialog";
 import { evaluateGate, loadHariHSettings, type HariHSettings } from "@/lib/hari-h-gating";
 import { syncGroupToRekap } from "@/lib/rekap-sync";
-import { getDb, getDisplayStatusLocal, normalizeSectionStatus, isSectionCompleted, syncNeurologiLabKeswaStatusLocal, resolveRikkesDetailLocal, logAuditLocal } from "@/lib/localDb";
-import { ensureExamForCandidateLocal } from "@/lib/services/examService";
-import { refreshAllDerivedDataLocal, subscribeLocalDbChanged, syncExamRelationsLocal } from "@/lib/services/syncService";
+import {
+  getDb,
+  getDisplayStatusLocal,
+  getLocalSession,
+  syncNeurologiLabKeswaStatusLocal,
+  resolveRikkesDetailLocal,
+  logAuditLocal,
+} from "@/lib/localDb";
+import { ensureExamForCandidateLocal, updateExamLocal } from "@/lib/services/examService";
+import {
+  refreshAllDerivedDataLocal,
+  subscribeLocalDbChanged,
+  syncExamRelationsLocal,
+} from "@/lib/services/syncService";
 import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
-import { persistExamSectionLocal } from "@/lib/services/examSectionService";
+import {
+  approveSectionLocal,
+  finalizeExamLocal,
+  requestRevisionSectionLocal,
+  saveSectionDraftLocal,
+  submitSectionLocal,
+} from "@/lib/services/sectionWorkflowService";
+import { normalizeSectionStatus as normalizeWorkflowStatus } from "@/lib/services/workflowStatusService";
 
 // Lazy-load heavy form components so initial detail render only ships the active section.
 const IdentitasAnamnesisForm = lazy(() =>
@@ -112,6 +130,13 @@ type Group = {
   status: string;
   form_data_json: any;
   submitted_at: string | null;
+  submitted_by?: string | null;
+  approved_at?: string | null;
+  approved_by?: string | null;
+  updated_at?: string | null;
+  updated_by?: string | null;
+  revision_reason?: string | null;
+  needs_reapproval?: boolean;
   return_reason: string | null;
 };
 
@@ -177,9 +202,16 @@ function RikkesDetail() {
       (resolved.sections ?? []).map((g: any) => ({
         id: g.id,
         group_key: g.section_key,
-        status: g.section_status,
+        status: normalizeWorkflowStatus(g.section_status),
         form_data_json: g.form_data_json ?? {},
         submitted_at: g.submitted_at ?? null,
+        submitted_by: g.submitted_by ?? null,
+        approved_at: g.approved_at ?? null,
+        approved_by: g.approved_by ?? null,
+        updated_at: g.updated_at ?? null,
+        updated_by: g.updated_by ?? null,
+        revision_reason: g.revision_reason ?? g.return_reason ?? null,
+        needs_reapproval: !!g.needs_reapproval,
         return_reason: g.return_reason ?? null,
       })),
     );
@@ -201,7 +233,13 @@ function RikkesDetail() {
     logAudit({ action: "open_detail_exam", module: "rikkes", record_id: id, candidate_id: id });
   }, [id, load]);
 
-  useEffect(() => subscribeLocalDbChanged(() => { void load(); }), [load]);
+  useEffect(
+    () =>
+      subscribeLocalDbChanged(() => {
+        void load();
+      }),
+    [load],
+  );
 
   useEffect(() => {
     if (!currentExam?.id) return;
@@ -215,22 +253,22 @@ function RikkesDetail() {
 
   async function persistGroup(key: RikkesGroupKey, patch: Record<string, any>) {
     if (!currentExam) return null;
-    const nextStatus = (patch.status ?? patch.section_status ?? "Draft") as "Draft" | "Submitted";
-    return persistExamSectionLocal(currentExam.id, key, patch.form_data_json ?? {}, nextStatus, {
-      submitted_at: patch.submitted_at,
-      submitted_by: patch.submitted_by,
-      return_reason: patch.return_reason,
-      returned_to_draft_at: patch.returned_to_draft_at,
-      returned_to_draft_by: patch.returned_to_draft_by,
-    });
+    const nextStatus = normalizeWorkflowStatus(patch.status ?? patch.section_status ?? "Draft");
+    if (nextStatus === "Submitted")
+      return submitSectionLocal(currentExam.id, key, patch.form_data_json ?? {});
+    if (nextStatus === "Revision")
+      return requestRevisionSectionLocal(
+        currentExam.id,
+        key,
+        patch.return_reason ?? patch.revision_reason ?? "Perlu revisi",
+      );
+    return saveSectionDraftLocal(currentExam.id, key, patch.form_data_json ?? {});
   }
 
   async function saveDraft(key: RikkesGroupKey, data: any) {
+    if (!currentExam?.id) return;
     try {
-      await persistGroup(key, {
-        form_data_json: data,
-        status: getGroup(key)?.status === "Submitted" ? "Submitted" : "Draft",
-      });
+      await saveSectionDraftLocal(currentExam.id, key, data);
       await logAudit({
         action: "save_draft_section",
         module: "rikkes",
@@ -239,9 +277,17 @@ function RikkesDetail() {
         after: { group_key: key },
       });
       if (currentExam) {
-        const nextStatus = getGroup(key)?.status === "Submitted" ? "Submitted" : "Draft";
-        await syncGroupToRekap({ examId: currentExam.id, candidateId: id, groupKey: key, status: nextStatus, payload: data });
-        syncExamRelationsLocal(currentExam.id); refreshAllDerivedDataLocal();
+        const nextStatus =
+          normalizeWorkflowStatus(getGroup(key)?.status) === "Approved" ? "Revision" : "Draft";
+        await syncGroupToRekap({
+          examId: currentExam.id,
+          candidateId: id,
+          groupKey: key,
+          status: nextStatus,
+          payload: data,
+        });
+        syncExamRelationsLocal(currentExam.id);
+        refreshAllDerivedDataLocal();
       }
       toast.success("Draft tersimpan");
       await load();
@@ -270,14 +316,9 @@ function RikkesDetail() {
   }
 
   async function doSubmit(key: RikkesGroupKey, data: any) {
+    if (!currentExam?.id) return;
     try {
-      const u = getLocalSession();
-      await persistGroup(key, {
-        form_data_json: data,
-        status: "Submitted",
-        submitted_by: u?.user_id ?? "local_user",
-        submitted_at: new Date().toISOString(),
-      } as any);
+      await submitSectionLocal(currentExam.id, key, data);
       await logAudit({
         action: "submit_form_section",
         module: "rikkes",
@@ -286,8 +327,15 @@ function RikkesDetail() {
         after: { group_key: key },
       });
       if (currentExam) {
-        await syncGroupToRekap({ examId: currentExam.id, candidateId: id, groupKey: key, status: "Submitted", payload: data });
-        syncExamRelationsLocal(currentExam.id); refreshAllDerivedDataLocal();
+        await syncGroupToRekap({
+          examId: currentExam.id,
+          candidateId: id,
+          groupKey: key,
+          status: "Submitted",
+          payload: data,
+        });
+        syncExamRelationsLocal(currentExam.id);
+        refreshAllDerivedDataLocal();
       }
       toast.success("Formulir disubmit");
       await load();
@@ -322,14 +370,9 @@ function RikkesDetail() {
   }
 
   async function returnToDraft(key: RikkesGroupKey, reason: string) {
+    if (!currentExam?.id) return;
     try {
-      const u = getLocalSession();
-      await persistGroup(key, {
-        status: "Draft",
-        returned_to_draft_by: u?.user_id ?? "local_user",
-        returned_to_draft_at: new Date().toISOString(),
-        return_reason: reason,
-      } as any);
+      await requestRevisionSectionLocal(currentExam.id, key, reason || "Perlu revisi");
       await logAudit({
         action: "return_section_to_draft",
         module: "rikkes",
@@ -337,7 +380,7 @@ function RikkesDetail() {
         candidate_id: id,
         after: { group_key: key, reason },
       });
-      toast.success("Dikembalikan ke Draft");
+      toast.success("Section ditandai perlu revisi");
       await load();
     } catch (e: any) {
       toast.error(e.message);
@@ -351,6 +394,15 @@ function RikkesDetail() {
     const selection = (db.selections ?? []).find((s: any) => s.id === selectionId);
     return selection?.selection_name ?? selection?.name ?? "";
   }, [cand?.selection_id]);
+
+  const auditLogs = useMemo(() => {
+    if (!currentExam?.id) return [];
+    const db = getDb() as any;
+    return (db.audit_logs ?? [])
+      .filter((log: any) => log.exam_id === currentExam.id || log.candidate_id === cand?.id)
+      .sort((a: any, b: any) => String(b.created_at).localeCompare(String(a.created_at)))
+      .slice(0, 50);
+  }, [currentExam?.id, cand?.id, groups]);
 
   if (loading) {
     return <RikkesDetailSkeleton />;
@@ -376,16 +428,18 @@ function RikkesDetail() {
     laboratorium: "laboratorium",
     psikologi_subtim: "jiwa_keswa",
   };
-  const activeStatus =
+  const activeStatus = normalizeWorkflowStatus(
     currentExam?.id && activeMap[active]
       ? getDisplayStatusLocal(
           currentExam.id,
           activeMap[active],
           (getDb() as any)?.settings?.neuro_required ?? true,
         )
-      : activeStatusRaw;
-  const locked = activeStatus === "Locked";
-  const submitted = activeStatus === "Submitted" || activeStatus === "Approved";
+      : activeStatusRaw,
+  );
+  const locked = activeStatus === "Finalized";
+  const submitted =
+    activeStatus === "Submitted" || activeStatus === "Approved" || activeStatus === "Finalized";
   const readOnly = viewerOnly || locked || (submitted && !canEdit);
 
   return (
@@ -441,23 +495,26 @@ function RikkesDetail() {
                   laboratorium: "laboratorium",
                   psikologi_subtim: "jiwa_keswa",
                 };
-                const st =
+                const st = normalizeWorkflowStatus(
                   currentExam?.id && mapKey[g.key]
                     ? getDisplayStatusLocal(
                         currentExam.id,
                         mapKey[g.key],
                         (getDb() as any)?.settings?.neuro_required ?? true,
                       )
-                    : stRaw;
+                    : stRaw,
+                );
                 const isActive = active === g.key;
                 const accent =
-                  st === "Submitted" || st === "Approved"
-                    ? "border-l-emerald-500"
-                    : st === "Revision"
-                      ? "border-l-orange-500"
-                      : st === "Locked"
-                        ? "border-l-slate-500"
-                        : "border-l-amber-400";
+                  st === "Submitted"
+                    ? "border-l-blue-500"
+                    : st === "Approved"
+                      ? "border-l-emerald-500"
+                      : st === "Revision"
+                        ? "border-l-orange-500"
+                        : st === "Finalized"
+                          ? "border-l-purple-700"
+                          : "border-l-slate-400";
                 return (
                   <button
                     key={g.key}
@@ -478,7 +535,7 @@ function RikkesDetail() {
                     }`}
                   >
                     <span className="flex-1 truncate">{g.label}</span>
-                    {st === "Locked" ? (
+                    {st === "Finalized" ? (
                       <Lock className="h-3.5 w-3.5 shrink-0" />
                     ) : st === "Submitted" || st === "Approved" ? (
                       <Check className="h-3.5 w-3.5 shrink-0" />
@@ -544,43 +601,67 @@ function RikkesDetail() {
               </p>
             </div>
           ) : (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-            <FormHeader
-              groupLabel={RIKKES_GROUPS.find((g) => g.key === active)?.label ?? ""}
-              status={activeStatus}
-              canReturn={canReturn}
-              onReturn={(reason) => returnToDraft(active, reason)}
-              renderActions={(formData) => (
-                <FormActions
-                  status={activeStatus}
-                  canEdit={canEdit}
-                  onSaveDraft={() => saveDraft(active, formData)}
-                  onSubmit={() => submit(active, formData)}
-                />
-              )}
-              data={activeGroup?.form_data_json ?? {}}
-              readOnly={readOnly}
-              active={active}
-              cand={cand}
-              examId={currentExam?.id}
-              selectionLabel={selectionLabel}
-              onSaveDraft={(d) => saveDraft(active, d)}
-              onSubmit={(d) => submit(active, d)}
-              canEditAfterSubmit={canEdit}
-              onPersisted={load}
-              onSaveRevision={async (d, reason) => {
-                try {
-                  await persistGroup(active, { form_data_json: d, status: "Submitted" });
-                  await logAudit({
-                    action: "revise_section_after_submit",
-                    module: "rikkes",
-                    record_id: currentExam?.id,
-                    candidate_id: id,
-                    after: { group_key: active, reason },
-                  });
-                  if (currentExam) {
-                    await syncGroupToRekap({ examId: currentExam.id, candidateId: id, groupKey: active, status: "Submitted", payload: d });
-                    syncExamRelationsLocal(currentExam.id); refreshAllDerivedDataLocal();
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+              <FormHeader
+                groupLabel={RIKKES_GROUPS.find((g) => g.key === active)?.label ?? ""}
+                status={activeStatus}
+                sectionMeta={activeGroup}
+                canReturn={canReturn}
+                onReturn={(reason) => returnToDraft(active, reason)}
+                onApprove={async () => {
+                  if (!currentExam?.id) return;
+                  try {
+                    approveSectionLocal(currentExam.id, active, "");
+                    toast.success("Section disetujui");
+                    await load();
+                  } catch (e: any) {
+                    toast.error(e.message);
+                  }
+                }}
+                renderActions={(formData) => (
+                  <FormActions
+                    status={activeStatus}
+                    canEdit={canEdit}
+                    onSaveDraft={() => saveDraft(active, formData)}
+                    onSubmit={() => submit(active, formData)}
+                  />
+                )}
+                data={activeGroup?.form_data_json ?? {}}
+                readOnly={readOnly}
+                active={active}
+                cand={cand}
+                examId={currentExam?.id}
+                selectionLabel={selectionLabel}
+                onSaveDraft={(d) => saveDraft(active, d)}
+                onSubmit={(d) => submit(active, d)}
+                canEditAfterSubmit={canEdit}
+                onPersisted={load}
+                onSaveRevision={async (d, reason) => {
+                  if (!currentExam?.id) return;
+                  try {
+                    await saveSectionDraftLocal(currentExam.id, active, d);
+                    await logAudit({
+                      action: "revise_section_after_submit",
+                      module: "rikkes",
+                      record_id: currentExam?.id,
+                      candidate_id: id,
+                      after: { group_key: active, reason },
+                    });
+                    if (currentExam) {
+                      await syncGroupToRekap({
+                        examId: currentExam.id,
+                        candidateId: id,
+                        groupKey: active,
+                        status: "Revision",
+                        payload: d,
+                      });
+                      syncExamRelationsLocal(currentExam.id);
+                      refreshAllDerivedDataLocal();
+                    }
+                    toast.success("Revisi tersimpan dan perlu re-approval");
+                    await load();
+                  } catch (e: any) {
+                    toast.error(e.message);
                   }
                 }}
               />
@@ -588,6 +669,8 @@ function RikkesDetail() {
           )}
         </section>
       </div>
+
+      <AuditLogPanel logs={auditLogs} />
 
       <PreviewDialog
         open={previewOpen}
@@ -616,8 +699,10 @@ function RikkesDetail() {
 function FormHeader(props: {
   groupLabel: string;
   status: string;
+  sectionMeta?: Group;
   canReturn: boolean;
   onReturn: (reason: string) => void;
+  onApprove?: () => void | Promise<void>;
   renderActions?: (formData: any) => React.ReactNode;
   data: any;
   readOnly: boolean;
@@ -634,8 +719,10 @@ function FormHeader(props: {
   const {
     groupLabel,
     status,
+    sectionMeta,
     canReturn,
     onReturn,
+    onApprove,
     data,
     readOnly,
     active,
@@ -660,25 +747,33 @@ function FormHeader(props: {
     setEditMode(false);
   }, [data, active]);
 
-  const submittedState = status === "Submitted" || status === "Approved";
+  const normalizedStatus = normalizeWorkflowStatus(status);
+  const submittedState =
+    normalizedStatus === "Submitted" ||
+    normalizedStatus === "Approved" ||
+    normalizedStatus === "Finalized";
   const isSelfManaged = SELF_MANAGED_GROUPS.has(active);
   const showEditBtn =
     submittedState &&
+    normalizedStatus !== "Finalized" &&
     !!canEditAfterSubmit &&
     !readOnly &&
     !isSelfManaged &&
     !editMode &&
     !!onSaveRevision;
   const inRevisionHost = editMode && submittedState && !isSelfManaged;
-  const effectiveReadOnly = readOnly || (submittedState && !isSelfManaged && !inRevisionHost);
+  const effectiveReadOnly =
+    readOnly ||
+    normalizedStatus === "Finalized" ||
+    (submittedState && !isSelfManaged && !inRevisionHost);
   const reviseValid = reviseReason.trim().length >= 3;
 
   const statusStyle: Record<string, string> = {
-    Draft: "bg-amber-100 text-amber-800 border-amber-200",
-    Submitted: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    Draft: "bg-slate-100 text-slate-700 border-slate-200",
+    Submitted: "bg-blue-100 text-blue-700 border-blue-200",
     Approved: "bg-emerald-100 text-emerald-700 border-emerald-200",
     Revision: "bg-orange-100 text-orange-700 border-orange-200",
-    Locked: "bg-slate-100 text-slate-700 border-slate-200",
+    Finalized: "bg-purple-100 text-purple-800 border-purple-200",
   };
 
   return (
@@ -687,27 +782,49 @@ function FormHeader(props: {
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-bold text-slate-900">{groupLabel}</h2>
           <Badge
-            className={`${statusStyle[status] ?? statusStyle.Draft} border rounded-full text-[11px]`}
+            className={`${statusStyle[normalizedStatus] ?? statusStyle.Draft} border rounded-full text-[11px]`}
           >
-            Status: {status}
+            Status: {normalizedStatus}
           </Badge>
+          {sectionMeta?.needs_reapproval && (
+            <Badge className="bg-orange-100 text-orange-800 border-orange-200 border rounded-full text-[11px]">
+              Perlu Re-approval
+            </Badge>
+          )}
+        </div>
+        <div className="text-[11px] text-slate-500 flex flex-wrap gap-x-3 gap-y-1">
+          {sectionMeta?.updated_at && (
+            <span>
+              Terakhir disimpan: {new Date(sectionMeta.updated_at).toLocaleString("id-ID")}
+            </span>
+          )}
+          {sectionMeta?.submitted_by && <span>Submitted by: {sectionMeta.submitted_by}</span>}
+          {sectionMeta?.approved_by && <span>Approved by: {sectionMeta.approved_by}</span>}
         </div>
         <div className="flex gap-2">
-          {(status === "Submitted" || status === "Approved") && canReturn && (
+          {(normalizedStatus === "Submitted" || normalizedStatus === "Approved") && canReturn && (
             <Button variant="destructive" size="sm" onClick={() => setReturnOpen(true)}>
-              <Undo2 className="h-4 w-4 mr-1.5" /> Kembalikan ke Draft
+              <Undo2 className="h-4 w-4 mr-1.5" /> Request Revision
             </Button>
           )}
-          {(status === "Draft" || status === "Revision") && !readOnly && !isSelfManaged && (
-            <>
-              <Button variant="outline" size="sm" onClick={() => onSaveDraft(formData)}>
-                <Save className="h-4 w-4 mr-1.5" /> Simpan Draft
-              </Button>
-              <Button size="sm" onClick={() => onSubmit(formData)}>
-                <Send className="h-4 w-4 mr-1.5" /> Submit
-              </Button>
-            </>
+          {normalizedStatus === "Submitted" && canReturn && onApprove && (
+            <Button variant="secondary" size="sm" onClick={() => void onApprove()}>
+              <Check className="h-4 w-4 mr-1.5" /> Approve
+            </Button>
           )}
+          {(normalizedStatus === "Draft" || normalizedStatus === "Revision") &&
+            !readOnly &&
+            !isSelfManaged && (
+              <>
+                <Button variant="outline" size="sm" onClick={() => onSaveDraft(formData)}>
+                  <Save className="h-4 w-4 mr-1.5" /> Simpan Draft
+                </Button>
+                <Button size="sm" onClick={() => onSubmit(formData)}>
+                  <Send className="h-4 w-4 mr-1.5" />{" "}
+                  {normalizedStatus === "Revision" ? "Submit Ulang" : "Submit"}
+                </Button>
+              </>
+            )}
           {showEditBtn && (
             <Button size="sm" variant="outline" onClick={() => setEditMode(true)}>
               <Pencil className="h-4 w-4 mr-1.5" /> Edit Data
@@ -741,12 +858,18 @@ function FormHeader(props: {
 
       {inRevisionHost && (
         <div className="mx-5 mt-3 p-2 bg-sky-50 border border-sky-200 rounded-md text-xs text-sky-800">
-          Mode Edit Setelah Submit aktif. Perubahan akan disimpan dengan status tetap{" "}
-          <strong>Submitted</strong> dan dicatat di audit log.
+          Mode Edit Setelah Approval/Submit aktif. Perubahan akan turun menjadi{" "}
+          <strong>Revision</strong> dan dicatat di audit log.
         </div>
       )}
 
-      {status === "Locked" && (
+      {sectionMeta?.revision_reason && (
+        <div className="mx-5 mt-3 p-2 bg-orange-50 border border-orange-200 rounded-md text-xs text-orange-800">
+          Alasan revisi: {sectionMeta.revision_reason}
+        </div>
+      )}
+
+      {normalizedStatus === "Finalized" && (
         <div className="m-5 p-3 bg-slate-100 border border-slate-200 rounded-md text-sm text-slate-700 flex items-center gap-2">
           <Lock className="h-4 w-4" /> Formulir ini sudah dikunci karena pemeriksaan telah
           difinalisasi.
@@ -773,14 +896,14 @@ function FormHeader(props: {
       <Dialog open={returnOpen} onOpenChange={setReturnOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Kembalikan ke Draft</DialogTitle>
+            <DialogTitle>Request Revision</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
             <Label className="text-xs">Alasan (opsional)</Label>
             <Textarea
               value={returnReason}
               onChange={(e) => setReturnReason(e.target.value)}
-              placeholder="Misal: ada data perlu dilengkapi"
+              placeholder="Misal: catatan abnormal belum dilengkapi"
             />
           </div>
           <DialogFooter>
@@ -795,7 +918,7 @@ function FormHeader(props: {
                 setReturnOpen(false);
               }}
             >
-              Kembalikan
+              Minta Revisi
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -900,21 +1023,98 @@ function ActiveForm({
 }) {
   const set = (patch: any) => onChange({ ...data, ...patch });
   switch (active) {
-    case "identitas_anamnesis": return <IdentitasAnamnesisForm cand={cand} exam={{ id: examId }} selectionLabel={selectionLabel} onSyncSection={async () => { if (examId) { syncExamRelationsLocal(examId); refreshAllDerivedDataLocal(); } }} />;
-    case "screening_hari_h": return <ScreeningHariHForm cand={cand} examId={examId} />;
-    case "lembar_evaluasi_umum": return <PemeriksaanUmumForm cand={cand} examId={examId} />;
-    case "evaluasi_klinis": return <ClinicalForm data={data} set={set} readOnly={readOnly} />;
-    case "gigi_odontogram": return examId ? <DentalOdontogramForm examId={examId} candidateId={cand.id} readOnly={readOnly} canEditAfterSubmit={canEditAfterSubmit} onPersisted={onPersisted} /> : null;
-    case "penunjang": return <PenunjangForm data={data} set={set} readOnly={readOnly} />;
-    case "ukuran_lain": return <UkuranForm data={data} set={set} readOnly={readOnly} examId={examId} />;
-    case "mata_tht": return <MataThtForm data={data} set={set} readOnly={readOnly} />;
-    case "tht_subtim": return examId ? <ThtForm examId={examId} candidateId={cand.id} readOnly={readOnly} canEditAfterSubmit={canEditAfterSubmit} /> : null;
-    case "mata_visus_subtim": return examId ? <EyeVisionForm examId={examId} candidateId={cand.id} readOnly={readOnly} canEditAfterSubmit={canEditAfterSubmit} /> : null;
-    case "bedah_subtim": return examId ? <SurgeryForm examId={examId} candidateId={cand.id} readOnly={readOnly} canEditAfterSubmit={canEditAfterSubmit} /> : null;
-    case "neurologi_subtim": return examId ? <NeurologyForm examId={examId} candidateId={cand.id} readOnly={readOnly} canEditAfterSubmit={canEditAfterSubmit} /> : null;
-    case "laboratorium": return examId ? <LabSubteamForm examId={examId} candidateId={cand.id} readOnly={readOnly} canEditAfterSubmit={canEditAfterSubmit} /> : null;
-    case "psikologi_subtim": return examId ? <PsychologyForm examId={examId} candidateId={cand.id} readOnly={readOnly} canEditAfterSubmit={canEditAfterSubmit} /> : null;
-    case "resume_rekomendasi": return <ResumeForm data={data} set={set} readOnly={readOnly} />;
+    case "identitas_anamnesis":
+      return (
+        <IdentitasAnamnesisForm
+          cand={cand}
+          exam={{ id: examId }}
+          selectionLabel={selectionLabel}
+          onSyncSection={async () => {
+            if (examId) {
+              syncExamRelationsLocal(examId);
+              refreshAllDerivedDataLocal();
+            }
+          }}
+        />
+      );
+    case "screening_hari_h":
+      return <ScreeningHariHForm cand={cand} examId={examId} />;
+    case "lembar_evaluasi_umum":
+      return <PemeriksaanUmumForm cand={cand} examId={examId} />;
+    case "evaluasi_klinis":
+      return <ClinicalForm data={data} set={set} readOnly={readOnly} />;
+    case "gigi_odontogram":
+      return examId ? (
+        <DentalOdontogramForm
+          examId={examId}
+          candidateId={cand.id}
+          readOnly={readOnly}
+          canEditAfterSubmit={canEditAfterSubmit}
+          onPersisted={onPersisted}
+        />
+      ) : null;
+    case "penunjang":
+      return <PenunjangForm data={data} set={set} readOnly={readOnly} />;
+    case "ukuran_lain":
+      return <UkuranForm data={data} set={set} readOnly={readOnly} examId={examId} />;
+    case "mata_tht":
+      return <MataThtForm data={data} set={set} readOnly={readOnly} />;
+    case "tht_subtim":
+      return examId ? (
+        <ThtForm
+          examId={examId}
+          candidateId={cand.id}
+          readOnly={readOnly}
+          canEditAfterSubmit={canEditAfterSubmit}
+        />
+      ) : null;
+    case "mata_visus_subtim":
+      return examId ? (
+        <EyeVisionForm
+          examId={examId}
+          candidateId={cand.id}
+          readOnly={readOnly}
+          canEditAfterSubmit={canEditAfterSubmit}
+        />
+      ) : null;
+    case "bedah_subtim":
+      return examId ? (
+        <SurgeryForm
+          examId={examId}
+          candidateId={cand.id}
+          readOnly={readOnly}
+          canEditAfterSubmit={canEditAfterSubmit}
+        />
+      ) : null;
+    case "neurologi_subtim":
+      return examId ? (
+        <NeurologyForm
+          examId={examId}
+          candidateId={cand.id}
+          readOnly={readOnly}
+          canEditAfterSubmit={canEditAfterSubmit}
+        />
+      ) : null;
+    case "laboratorium":
+      return examId ? (
+        <LabSubteamForm
+          examId={examId}
+          candidateId={cand.id}
+          readOnly={readOnly}
+          canEditAfterSubmit={canEditAfterSubmit}
+        />
+      ) : null;
+    case "psikologi_subtim":
+      return examId ? (
+        <PsychologyForm
+          examId={examId}
+          candidateId={cand.id}
+          readOnly={readOnly}
+          canEditAfterSubmit={canEditAfterSubmit}
+        />
+      ) : null;
+    case "resume_rekomendasi":
+      return <ResumeForm data={data} set={set} readOnly={readOnly} />;
   }
 }
 
@@ -1783,6 +1983,98 @@ function ResumeForm({ data, set, readOnly }: any) {
   );
 }
 
+/* -------------------- Audit Log Panel -------------------- */
+function AuditLogPanel({ logs }: { logs: any[] }) {
+  const [filter, setFilter] = useState("all");
+  const filtered = logs.filter((log) => {
+    if (filter === "all") return true;
+    return String(log.action ?? "")
+      .toLowerCase()
+      .includes(filter);
+  });
+  const filters = [
+    ["all", "Semua"],
+    ["draft", "Draft"],
+    ["submit", "Submit"],
+    ["approve", "Approve"],
+    ["revision", "Revision"],
+    ["finalize", "Finalize"],
+  ];
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">Audit Log</h2>
+          <p className="text-xs text-slate-500">
+            Riwayat perubahan workflow, before/after diff, user, dan waktu.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {filters.map(([value, label]) => (
+            <Button
+              key={value}
+              size="sm"
+              variant={filter === value ? "default" : "outline"}
+              onClick={() => setFilter(value)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      </div>
+      <div className="space-y-2 max-h-96 overflow-auto pr-1">
+        {filtered.length === 0 ? (
+          <div className="text-sm text-slate-500 border border-dashed border-slate-200 rounded-md p-4">
+            Belum ada audit log untuk peserta ini.
+          </div>
+        ) : (
+          filtered.map((log) => {
+            const changes = Array.isArray(log.changed_fields) ? log.changed_fields : [];
+            return (
+              <div
+                key={log.id}
+                className="border border-slate-200 rounded-md p-3 text-sm space-y-2"
+              >
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <div className="font-semibold text-slate-800">{log.action}</div>
+                    <div className="text-xs text-slate-500">
+                      {log.module ?? "-"} · Section: {log.section_key ?? "-"} · User:{" "}
+                      {log.user_id ?? "-"} ({log.role ?? "-"})
+                    </div>
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {log.created_at ? new Date(log.created_at).toLocaleString("id-ID") : "-"}
+                  </div>
+                </div>
+                {log.notes && <div className="text-xs text-slate-600">Catatan: {log.notes}</div>}
+                {changes.length > 0 && (
+                  <div className="bg-slate-50 rounded-md p-2 text-xs space-y-1">
+                    {changes.slice(0, 8).map((change: any) => (
+                      <div key={change.field} className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <span className="font-medium text-slate-700">{change.field}</span>
+                        <span className="text-red-700 break-all">
+                          Sebelum: {JSON.stringify(change.before)}
+                        </span>
+                        <span className="text-emerald-700 break-all">
+                          Sesudah: {JSON.stringify(change.after)}
+                        </span>
+                      </div>
+                    ))}
+                    {changes.length > 8 && (
+                      <div className="text-slate-500">+{changes.length - 8} field lain berubah</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* -------------------- Preview Dialog -------------------- */
 function PreviewDialog({
   open,
@@ -1799,7 +2091,7 @@ function PreviewDialog({
 }) {
   const allSubmitted = RIKKES_GROUPS.every((g) => {
     const grp = groups.find((x) => x.group_key === g.key);
-    return grp?.status === "Submitted" || grp?.status === "Approved" || grp?.status === "Locked";
+    return ["Submitted", "Approved", "Finalized"].includes(normalizeWorkflowStatus(grp?.status));
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1831,7 +2123,9 @@ function PreviewDialog({
                       (getDb() as any)?.settings?.neuro_required ?? true,
                     )
                   : stRaw;
-              const ok = st === "Submitted" || st === "Approved" || st === "Locked";
+              const ok = ["Submitted", "Approved", "Finalized"].includes(
+                normalizeWorkflowStatus(st),
+              );
               return (
                 <div
                   key={g.key}
@@ -1859,13 +2153,21 @@ function PreviewDialog({
             Generate Preview PDF
           </Button>
           <Button
-            disabled={!allSubmitted}
+            disabled={!allSubmitted || currentExam?.exam_status === "Finalized"}
             onClick={() => {
-              toast.info("Gunakan Mode Lanjutan untuk finalisasi resmi.");
+              if (!currentExam?.id) return;
+              const result = finalizeExamLocal(currentExam.id);
+              if (!result.ok) {
+                toast.error(
+                  `Belum bisa finalisasi: ${result.issues?.map((issue: any) => issue.message).join(", ")}`,
+                );
+                return;
+              }
+              toast.success("Exam berhasil difinalisasi");
               onOpenChange(false);
             }}
           >
-            Finalisasi
+            {currentExam?.exam_status === "Finalized" ? "Sudah Finalized" : "Finalisasi"}
           </Button>
         </DialogFooter>
       </DialogContent>

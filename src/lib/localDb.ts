@@ -74,11 +74,35 @@ function createEmptyDb() {
   };
 }
 
-export function saveDb(db: LocalDb) { db.meta.updated_at = nowIso(); localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(db)); }
-export function setDb(db: LocalDb) { saveDb(db); if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("localDbChanged", { detail: { moduleName: "localDb_set" } })); return db; }
-export function initLocalDb() { const db = createEmptyDb(); saveDb(db); return db; }
-export function getDb(): LocalDb { try { const raw = localStorage.getItem(LOCAL_DB_KEY); if (!raw) return initLocalDb(); return migrateLocalDb(JSON.parse(raw)); } catch { return initLocalDb(); } }
-export function resetLocalDb() { return initLocalDb(); }
+export function saveDb(db: LocalDb) {
+  db.meta.updated_at = nowIso();
+  localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(db));
+}
+export function setDb(db: LocalDb) {
+  saveDb(db);
+  if (typeof window !== "undefined")
+    window.dispatchEvent(
+      new CustomEvent("localDbChanged", { detail: { moduleName: "localDb_set" } }),
+    );
+  return db;
+}
+export function initLocalDb() {
+  const db = createEmptyDb();
+  saveDb(db);
+  return db;
+}
+export function getDb(): LocalDb {
+  try {
+    const raw = localStorage.getItem(LOCAL_DB_KEY);
+    if (!raw) return initLocalDb();
+    return migrateLocalDb(JSON.parse(raw));
+  } catch {
+    return initLocalDb();
+  }
+}
+export function resetLocalDb() {
+  return initLocalDb();
+}
 
 export function migrateLocalDb(input?: any): LocalDb {
   const db: any =
@@ -306,12 +330,14 @@ export function normalizeSectionStatus(status?: string | null) {
   if (s === "submitted") return "Submitted";
   if (s === "approved") return "Approved";
   if (s === "locked") return "Locked";
+  if (s === "selesai") return "Submitted";
+  if (s === "finalized" || s === "final") return "Finalized";
   if (s === "revision") return "Revision";
   if (s === "optional") return "Optional";
   return "Draft";
 }
 export function isSectionCompleted(status?: string | null) {
-  return ["Submitted", "Approved", "Locked"].includes(normalizeSectionStatus(status));
+  return ["Submitted", "Approved", "Locked", "Finalized"].includes(normalizeSectionStatus(status));
 }
 
 function upsertAuditLog(

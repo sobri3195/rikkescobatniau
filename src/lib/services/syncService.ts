@@ -9,7 +9,7 @@ import {
 } from "@/lib/localDb";
 import { buildRekapAplikasiRowLocal } from "@/lib/rekap-aplikasi-local";
 
-const COMPLETED_STATUSES = ["Submitted", "Approved", "Locked", "Selesai"];
+const COMPLETED_STATUSES = ["Submitted", "Approved", "Locked", "Selesai", "Finalized"];
 const MAIN_SECTION_KEYS = [
   "identitas_anamnesis",
   "screening_hari_h",
